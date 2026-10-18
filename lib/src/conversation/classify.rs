@@ -68,6 +68,13 @@ pub(crate) trait TranscriptDialect {
 
     /// Whether an assistant entry's tool_use blocks on user interaction.
     fn blocking_tool(&self, entry: &Value) -> BlockingTool;
+
+    /// Whether every blocking tool_use in `entry` already has its result in
+    /// `later`, the skipped entries after it. Dialects without blocking
+    /// tools never reach this.
+    fn blocking_tool_answered(&self, _entry: &Value, _later: &[Value]) -> bool {
+        false
+    }
 }
 
 /// Derive the session state from a transcript tail. `source` is the JSONL
@@ -79,9 +86,10 @@ pub(crate) fn classify<D: TranscriptDialect>(
 ) -> SessionState {
     let last = entries
         .iter()
+        .enumerate()
         .rev()
-        .find_map(|e| dialect.role(e).map(|role| (role, e)));
-    let Some((role, entry)) = last else {
+        .find_map(|(i, e)| dialect.role(e).map(|role| (i, role, e)));
+    let Some((idx, role, entry)) = last else {
         debug!("classify[{}]: no meaningful entry → Idle", D::NAME);
         return SessionState::Idle;
     };
@@ -94,6 +102,15 @@ pub(crate) fn classify<D: TranscriptDialect>(
             None | Some("") => SessionState::Processing,
             Some(stop) => match dialect.map_stop(stop) {
                 StopMapping::EndOfTurn => SessionState::WaitingForInput,
+                // An answered prompt's tool_result is skipped as metadata, so
+                // the prompt stays the last meaningful entry until the agent
+                // writes its next one — which can take minutes of thinking.
+                StopMapping::ToolUse
+                    if dialect.blocking_tool(entry) != BlockingTool::None
+                        && dialect.blocking_tool_answered(entry, &entries[idx + 1..]) =>
+                {
+                    SessionState::Processing
+                }
                 StopMapping::ToolUse => match dialect.blocking_tool(entry) {
                     BlockingTool::Question => SessionState::Question,
                     BlockingTool::WaitsForInput => SessionState::WaitingForInput,
@@ -243,6 +260,26 @@ mod tests {
                 claude: vec![c_assistant(Some("tool_use"), c_tool_use("AskUserQuestion"))],
                 expect_claude: Question,
                 pi: vec![p_assistant(Some("toolUse"), p_tool_call("AskUserQuestion"))],
+                expect_pi: Processing,
+            },
+            Case {
+                name: "answered question, next turn not written yet",
+                claude: vec![
+                    c_assistant(Some("tool_use"), c_tool_use("AskUserQuestion")),
+                    c_tool_result_only(),
+                ],
+                expect_claude: Processing,
+                pi: vec![p_assistant(Some("toolUse"), p_tool_call("AskUserQuestion"))],
+                expect_pi: Processing,
+            },
+            Case {
+                name: "approved plan, next turn not written yet",
+                claude: vec![
+                    c_assistant(Some("tool_use"), c_tool_use("ExitPlanMode")),
+                    c_tool_result_only(),
+                ],
+                expect_claude: Processing,
+                pi: vec![p_assistant(Some("toolUse"), p_tool_call("ExitPlanMode"))],
                 expect_pi: Processing,
             },
             Case {

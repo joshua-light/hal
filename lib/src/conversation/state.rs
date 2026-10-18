@@ -189,6 +189,35 @@ impl classify::TranscriptDialect for ClaudeDialect {
             classify::BlockingTool::None
         }
     }
+
+    fn blocking_tool_answered(&self, entry: &Value, later: &[Value]) -> bool {
+        let Some(content) = entry
+            .get("message")
+            .and_then(|m| m.get("content"))
+            .and_then(|c| c.as_array())
+        else {
+            return false;
+        };
+        let pending: Vec<&str> = content
+            .iter()
+            .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("tool_use"))
+            .filter(|b| {
+                b.get("name")
+                    .and_then(|n| n.as_str())
+                    .is_some_and(|name| USER_INPUT_TOOLS.contains(&name))
+            })
+            .filter_map(|b| b.get("id").and_then(|v| v.as_str()))
+            .collect();
+        let answered: HashSet<&str> = later
+            .iter()
+            .filter(|e| e.get("type").and_then(|t| t.as_str()) == Some("user"))
+            .filter_map(|e| e.get("message")?.get("content")?.as_array())
+            .flatten()
+            .filter(|b| b.get("type").and_then(|t| t.as_str()) == Some("tool_result"))
+            .filter_map(|b| b.get("tool_use_id").and_then(|v| v.as_str()))
+            .collect();
+        !pending.is_empty() && pending.iter().all(|id| answered.contains(id))
+    }
 }
 
 /// Determine session state from the last meaningful user/assistant entry.
