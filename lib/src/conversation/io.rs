@@ -307,6 +307,59 @@ pub fn read_jsonl_head(path: &Path, max_bytes: u64) -> Vec<Value> {
     lines
 }
 
+/// How far [`read_jsonl_head_until`]'s callers follow a transcript for its
+/// first prompt. A pasted first prompt can run to hundreds of KiB (440 KB
+/// seen in the wild), and the line holding it is the first to carry `cwd`.
+const HEAD_SCAN_MAX_BYTES: u64 = 8 * 1024 * 1024;
+
+/// Entries from the start of `path` through the first one `stop` accepts,
+/// reading at most `max_bytes`. Unlike [`read_jsonl_head`]'s fixed window,
+/// this follows a long line to its end, so a huge first prompt can't hide
+/// the entries behind it. A line cut off by `max_bytes` fails to parse and is
+/// dropped.
+fn read_jsonl_head_until(path: &Path, max_bytes: u64, stop: impl Fn(&Value) -> bool) -> Vec<Value> {
+    let Ok(file) = File::open(path) else {
+        return Vec::new();
+    };
+    let mut reader = BufReader::new(std::io::Read::take(file, max_bytes));
+    let mut entries = Vec::new();
+    let mut line = Vec::new();
+    loop {
+        line.clear();
+        match reader.read_until(b'\n', &mut line) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        let Ok(entry) = serde_json::from_slice::<Value>(&line) else {
+            continue;
+        };
+        let done = stop(&entry);
+        entries.push(entry);
+        if done {
+            break;
+        }
+    }
+    entries
+}
+
+/// The session's cwd, however deep in the transcript its first carrier sits.
+/// For transcripts whose fixed head window holds no `cwd`.
+pub(crate) fn read_cwd(path: &Path) -> Option<String> {
+    let entries = read_jsonl_head_until(path, HEAD_SCAN_MAX_BYTES, |e| {
+        e.get("cwd").is_some_and(Value::is_string)
+    });
+    super::messages::extract_cwd(&entries)
+}
+
+/// The first user message, however deep in the transcript it sits. For
+/// transcripts whose fixed head window holds none.
+pub fn read_first_user_message(path: &Path) -> Option<String> {
+    let entries = read_jsonl_head_until(path, HEAD_SCAN_MAX_BYTES, |e| {
+        super::messages::extract_first_user_message(std::slice::from_ref(e)).is_some()
+    });
+    super::messages::extract_first_user_message(&entries)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,7 +1,7 @@
-//! Mtime-keyed memoization of derived transcript state and immutable
-//! first-user-message summaries.
+//! Mtime-keyed memoization of derived transcript state, plus the immutable
+//! first-user-message summaries and session cwds.
 
-use super::io::{read_jsonl_head, read_jsonl_tail_for_state};
+use super::io::{read_cwd, read_first_user_message, read_jsonl_head, read_jsonl_tail_for_state};
 use super::messages::{
     extract_first_user_message, extract_last_activity, extract_last_user_message, extract_metadata,
 };
@@ -143,10 +143,6 @@ pub fn derive_state_cached(path: &Path) -> Option<Arc<StateDerivation>> {
 /// Head window for summary extraction. Covers the meta entries (`mode`,
 /// `permission-mode`, `file-history-snapshot`) plus any typical first prompt.
 const SUMMARY_HEAD_BYTES: u64 = 4096;
-/// Fallback window when the first user line straddles the 4KB boundary —
-/// `read_jsonl_head` drops a partial last line, so a long pasted prompt
-/// needs a window that contains it whole.
-const SUMMARY_HEAD_RETRY_BYTES: u64 = 256 * 1024;
 
 /// First-user-message summary for `path`, memoized permanently per path once
 /// a message exists.
@@ -172,10 +168,9 @@ pub fn first_user_message_cached(path: &Path) -> Option<String> {
     let summary = extract_first_user_message(&head).or_else(|| {
         // A long first prompt can start inside the 4KB window but extend past
         // it, in which case read_jsonl_head discards it as a partial line —
-        // retry once with a window big enough for any realistic prompt.
+        // follow the transcript until the prompt ends.
         if std::fs::metadata(path).is_ok_and(|m| m.len() > SUMMARY_HEAD_BYTES) {
-            let head = read_jsonl_head(path, SUMMARY_HEAD_RETRY_BYTES);
-            extract_first_user_message(&head)
+            read_first_user_message(path)
         } else {
             None
         }
@@ -183,6 +178,30 @@ pub fn first_user_message_cached(path: &Path) -> Option<String> {
     let mut cache = summary_cache().lock().unwrap_or_else(|e| e.into_inner());
     cache.insert(path.to_path_buf(), summary.clone());
     Some(summary)
+}
+
+/// Immutable cwd cache for transcripts whose head window holds no `cwd`.
+/// Same Some-only policy as [`summary_cache`]: the cwd line is the first
+/// prompt, which may not have landed yet.
+fn cwd_cache() -> &'static Mutex<HashMap<PathBuf, String>> {
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, String>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// [`read_cwd`] memoized permanently per path once a cwd exists — a session
+/// never changes directory, and finding the cwd can mean reading past a
+/// first prompt hundreds of KiB long, so a scan tick must not repeat it.
+pub fn cwd_cached(path: &Path) -> Option<String> {
+    {
+        let cache = cwd_cache().lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(cached) = cache.get(path) {
+            return Some(cached.clone());
+        }
+    }
+    let cwd = read_cwd(path)?;
+    let mut cache = cwd_cache().lock().unwrap_or_else(|e| e.into_inner());
+    cache.insert(path.to_path_buf(), cwd.clone());
+    Some(cwd)
 }
 
 /// Evict cache entries for transcripts not present in `visited` this scan
@@ -195,6 +214,10 @@ pub fn retain_cached(visited: &HashSet<PathBuf>) {
     }
     {
         let mut cache = summary_cache().lock().unwrap_or_else(|e| e.into_inner());
+        cache.retain(|k, _| visited.contains(k));
+    }
+    {
+        let mut cache = cwd_cache().lock().unwrap_or_else(|e| e.into_inner());
         cache.retain(|k, _| visited.contains(k));
     }
 }
@@ -347,8 +370,8 @@ mod tests {
     }
 
     // A first prompt that starts inside the 4KB head window but extends past
-    // it is discarded as a partial line by read_jsonl_head — the larger retry
-    // window must recover it.
+    // it is discarded as a partial line by read_jsonl_head — the streaming
+    // fallback must recover it.
     #[test]
     fn first_user_message_cached_finds_message_straddling_head_window() {
         let _guard = PARSE_COUNTER_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -364,6 +387,54 @@ mod tests {
         );
         let got = first_user_message_cached(&p).expect("retry window must find the message");
         assert!(got.starts_with("start of a long pasted prompt"));
+
+        let _ = std::fs::remove_file(&p);
+    }
+
+    // A prompt longer than the old 256 KiB retry window, behind
+    // `queue-operation` lines that carry no cwd — the shape that hid a quarter
+    // of a real archive. Both the summary and the cwd must surface.
+    #[test]
+    fn summary_and_cwd_found_past_a_huge_first_prompt() {
+        let _guard = PARSE_COUNTER_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let p = fresh_jsonl("huge-first-prompt");
+        let queued = "q".repeat(200 * 1024);
+        let prompt = format!("refactor the parser {}", "y".repeat(300 * 1024));
+        write_jsonl(
+            &p,
+            &[
+                &format!(
+                    r#"{{"type":"queue-operation","operation":"enqueue","content":"{queued}"}}"#
+                ),
+                r#"{"type":"queue-operation","operation":"dequeue"}"#,
+                &format!(
+                    r#"{{"type":"user","cwd":"/tmp/deep","message":{{"role":"user","content":"{prompt}"}}}}"#
+                ),
+            ],
+        );
+        let got = first_user_message_cached(&p).expect("summary past 256 KiB");
+        assert!(got.starts_with("refactor the parser"));
+        assert_eq!(cwd_cached(&p).as_deref(), Some("/tmp/deep"));
+
+        let _ = std::fs::remove_file(&p);
+    }
+
+    // The cwd line may not have landed yet; that None must not stick.
+    #[test]
+    fn cwd_cached_does_not_cache_none() {
+        let _guard = PARSE_COUNTER_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let p = fresh_jsonl("cwd-none-not-cached");
+        write_jsonl(&p, &[r#"{"type":"mode","mode":"normal","sessionId":"s"}"#]);
+        assert_eq!(cwd_cached(&p), None);
+
+        write_jsonl(
+            &p,
+            &[
+                r#"{"type":"mode","mode":"normal","sessionId":"s"}"#,
+                r#"{"type":"user","cwd":"/tmp/late","message":{"role":"user","content":"hi"}}"#,
+            ],
+        );
+        assert_eq!(cwd_cached(&p).as_deref(), Some("/tmp/late"));
 
         let _ = std::fs::remove_file(&p);
     }

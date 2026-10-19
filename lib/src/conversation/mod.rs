@@ -36,10 +36,14 @@ pub(crate) mod test_util;
 
 #[cfg(all(test, unix))]
 pub(crate) use cache::state_derive_parse_count;
-pub use cache::{derive_state_cached, first_user_message_cached, retain_cached, StateDerivation};
+pub use cache::{
+    cwd_cached, derive_state_cached, first_user_message_cached, retain_cached, StateDerivation,
+};
+pub(crate) use io::read_cwd;
 pub use io::{
-    count_blocks_in_reader, count_blocks_of_type, count_tool_uses_in_reader, read_jsonl_all,
-    read_jsonl_head, read_jsonl_tail, read_jsonl_tail_for_state,
+    count_blocks_in_reader, count_blocks_of_type, count_tool_uses_in_reader,
+    read_first_user_message, read_jsonl_all, read_jsonl_head, read_jsonl_tail,
+    read_jsonl_tail_for_state,
 };
 pub(crate) use messages::{extract_cwd, extract_started_at, full_text};
 pub use messages::{

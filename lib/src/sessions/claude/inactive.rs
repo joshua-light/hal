@@ -8,8 +8,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// Build a [`SessionInfo`] from an orphan JSONL alone — no metadata file, no
-/// live process. `cwd` is taken from the first JSONL entry that carries one;
-/// the encoded directory name isn't losslessly decodable, so files without a
+/// live process. `cwd` is taken from the first JSONL entry that carries one,
+/// however deep — a long first prompt pushes it past the head window. The
+/// encoded directory name isn't losslessly decodable, so files without a
 /// usable `cwd` entry are skipped. Files whose cwd matches
 /// [`crate::title::scratch_cwd`] are also skipped — those are the one-shot
 /// `hal-new -p` runs the titler fires, not real sessions.
@@ -20,7 +21,8 @@ fn synthesize_inactive_from_jsonl(
     let session_id = path.file_stem().and_then(|s| s.to_str())?.to_string();
     let head_entries = conversation::read_jsonl_head(path, 4096);
 
-    let cwd = conversation::extract_cwd(&head_entries)?;
+    let cwd =
+        conversation::extract_cwd(&head_entries).or_else(|| conversation::cwd_cached(path))?;
 
     if is_scratch_cwd(&cwd) {
         return None;

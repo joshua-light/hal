@@ -6,9 +6,10 @@
 //! the archive walks the full transcript stores and returns one flat,
 //! newest-first list for the session finder to fuzzy-search.
 //!
-//! Per transcript only the head is read (the same few KiB the scanner reads),
-//! so indexing ~1000 sessions is a burst of small reads — run it off the
-//! event loop (see `Effect::BuildSessionIndex`), never on a key press.
+//! Per transcript mostly the head is read (the same few KiB the scanner
+//! reads); only a transcript whose first prompt overflows it is followed
+//! further. Indexing ~1000 sessions is still a burst of reads — run it off
+//! the event loop (see `Effect::BuildSessionIndex`), never on a key press.
 
 use crate::agent::AgentKind;
 use crate::config;
@@ -109,9 +110,15 @@ fn scan_claude(titles: &HashMap<String, String>) -> Vec<IndexedSession> {
             };
             let session_id = session_id.to_string();
             let head = conversation::read_jsonl_head(&path, 4096);
-            let Some(cwd) = conversation::extract_cwd(&head) else {
+            // A first prompt longer than the head hides both the cwd and the
+            // message it carries; follow the transcript to find them.
+            let Some(cwd) =
+                conversation::extract_cwd(&head).or_else(|| conversation::read_cwd(&path))
+            else {
                 continue;
             };
+            let first_message = conversation::extract_first_user_message(&head)
+                .or_else(|| conversation::read_first_user_message(&path));
             out.push(IndexedSession {
                 agent_id: "claude".into(),
                 agent_kind: AgentKind::Claude,
@@ -120,7 +127,7 @@ fn scan_claude(titles: &HashMap<String, String>) -> Vec<IndexedSession> {
                 project_name: project_name(&cwd),
                 cwd,
                 mtime_ms: mtime_ms(&path).unwrap_or(0),
-                first_message: conversation::extract_first_user_message(&head),
+                first_message,
                 jsonl_path: path,
             });
         }
@@ -279,6 +286,35 @@ mod tests {
             fs::create_dir_all(&proj).unwrap();
             fs::write(proj.join("no-cwd.jsonl"), "{\"type\":\"system\"}\n").unwrap();
             assert!(scan().iter().all(|s| s.session_id != "no-cwd"));
+        });
+    }
+
+    #[test]
+    fn scan_indexes_a_transcript_whose_first_prompt_overflows_the_head() {
+        with_temp_home(|home| {
+            let proj = home.join(".claude/projects/-tmp-deep");
+            fs::create_dir_all(&proj).unwrap();
+            let prompt = format!("long pasted prompt {}", "y".repeat(8 * 1024));
+            fs::write(
+                proj.join("sid-deep.jsonl"),
+                format!(
+                    "{{\"type\":\"queue-operation\",\"operation\":\"dequeue\"}}\n\
+                     {{\"type\":\"user\",\"cwd\":\"/tmp/deep\",\
+                     \"message\":{{\"role\":\"user\",\"content\":\"{prompt}\"}}}}\n"
+                ),
+            )
+            .unwrap();
+
+            let index = scan();
+            let deep = index
+                .iter()
+                .find(|s| s.session_id == "sid-deep")
+                .expect("deep transcript indexed");
+            assert_eq!(deep.cwd, "/tmp/deep");
+            assert!(deep
+                .first_message
+                .as_deref()
+                .is_some_and(|m| m.starts_with("long pasted prompt")));
         });
     }
 
