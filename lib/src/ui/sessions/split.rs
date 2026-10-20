@@ -2,20 +2,17 @@
 //! live pane docked on the right — an editor's sidebar and buffer.
 //!
 //! The sidebar reads like an explorer tree. Each project opens with its
-//! name and a horizontal rule to the edge; under it, sessions linked to a task gather beneath that
-//! task's header like files in a subfolder, and unlinked sessions follow at
-//! the project's own level. A session row is only the dot and the title, so
+//! name and a horizontal rule to the edge, and its sessions follow beneath
+//! it, terminals set off by a gap. A session row is only the dot and the title, so
 //! the sidebar stays narrow; branch, model and context go up into the
 //! dock's border, for the one session on screen.
 
 use super::{
-    badge_color, dot_color, hold_header_above, keep_in_view, render_hold_header,
-    render_no_sessions, row_title, session_mark, CardMarks,
+    dot_color, hold_header_above, keep_in_view, render_hold_header, render_no_sessions, row_title,
+    session_mark, CardMarks,
 };
 use crate::app::{App, Dock, View};
-use crate::models::{
-    first_line_truncated, ProjectGroup, SessionInfo, SessionKind, SessionState, TaskBadge,
-};
+use crate::models::{first_line_truncated, ProjectGroup, SessionInfo, SessionKind, SessionState};
 use crate::ui::now_ms;
 use crate::ui::palette::{
     DIM_TEXT, HANDOFF_ROW_BG, SELECTED_HANDOFF_ROW_BG, SEP_GRAY, UNFOCUSED_HANDOFF_ROW_BG,
@@ -27,9 +24,6 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 use tui_term::widget::{Cursor, PseudoTerminal};
-
-/// The task header's mark, the same one the list and the cards use.
-const TASK_ICON: &str = "󰢨";
 
 pub(super) fn render_split(frame: &mut Frame, area: Rect, app: &mut App) {
     let split = Split::of(area, app.view == View::Dock);
@@ -46,23 +40,17 @@ enum Row<'a> {
     /// The On hold section's header, above the first held project.
     Hold,
     Project(&'a ProjectGroup),
-    /// A task's header, above the sessions linked to it.
-    Task(TaskBadge),
     Session {
         group: usize,
         index: usize,
         session: &'a SessionInfo,
-        /// Whether the session sits under a task header: its row indents
-        /// one step so the dot lines up with the task's title.
-        under_task: bool,
     },
     Gap,
 }
 
-/// Every row of the sidebar, in order. Task-linked sessions already lead
-/// their project, clustered by task, and terminals trail it (see
-/// `App::rebuild_groups`), so one pass that opens a header wherever the task
-/// changes, and leaves a gap above the first terminal, builds the tree.
+/// Every row of the sidebar, in order. Terminals already trail their
+/// project (see `App::rebuild_groups`), so one pass that leaves a gap above
+/// the first terminal builds the tree.
 fn rows(app: &App) -> Vec<Row<'_>> {
     let groups = &app.sessions.groups;
     let mut rows = Vec::new();
@@ -71,29 +59,17 @@ fn rows(app: &App) -> Vec<Row<'_>> {
             rows.push(Row::Hold);
         }
         rows.push(Row::Project(group));
-        let mut open_task: Option<String> = None;
         for (si, session) in group.sessions.iter().enumerate() {
             let first_terminal = session.kind == SessionKind::Terminal
                 && si > 0
                 && group.sessions[si - 1].kind != SessionKind::Terminal;
             if first_terminal {
                 rows.push(Row::Gap);
-                // A task the agents above share opens again for its
-                // terminals, so they don't read as loose rows.
-                open_task = None;
             }
-            let badge = app.task_badge(&session.session_id);
-            let task_id = badge.as_ref().map(|b| b.task_id.clone());
-            if task_id.is_some() && task_id != open_task {
-                rows.extend(badge.map(Row::Task));
-            }
-            let under_task = task_id.is_some();
-            open_task = task_id;
             rows.push(Row::Session {
                 group: gi,
                 index: si,
                 session,
-                under_task,
             });
         }
         rows.push(Row::Gap);
@@ -144,15 +120,13 @@ fn render_sidebar(frame: &mut Frame, split: Split, app: &mut App) {
         match row {
             Row::Hold => render_hold_header(frame, line, &app.sessions.groups),
             Row::Project(group) => render_project_header(frame, line, group),
-            Row::Task(badge) => render_task_header(frame, line, badge),
             Row::Session {
                 group,
                 index,
                 session,
-                under_task,
             } => {
                 let marks = CardMarks::of(app, *group, *index, session);
-                render_session(frame, line, session, *under_task, marks, split, now);
+                render_session(frame, line, session, marks, split, now);
             }
             Row::Gap => {}
         }
@@ -190,32 +164,18 @@ fn render_project_header(frame: &mut Frame, area: Rect, group: &ProjectGroup) {
     frame.render_widget(Paragraph::new(line), area);
 }
 
-/// ` 󰢨 task title`, in the task's identity colour (gray once it is done).
-fn render_task_header(frame: &mut Frame, area: Rect, badge: &TaskBadge) {
-    let title = badge.title.lines().next().unwrap_or("");
-    let title = first_line_truncated(title, (area.width as usize).saturating_sub(4));
-    let line = Line::from(Span::styled(
-        format!(" {TASK_ICON} {title}"),
-        Style::default().fg(badge_color(badge)),
-    ));
-    frame.render_widget(Paragraph::new(line), area);
-}
-
-/// ` ● title…`, or `   ● title…` under a task: the indent, the state dot,
-/// and the title. The cursor and the handoff mark are the row's
-/// background, see [`row_background`].
+/// ` ● title…`: the state dot and the title. The cursor and the handoff
+/// mark are the row's background, see [`row_background`].
 fn render_session(
     frame: &mut Frame,
     area: Rect,
     session: &SessionInfo,
-    under_task: bool,
     marks: CardMarks,
     split: Split,
     now: u64,
 ) {
     let dot = dot_color(&session.state, marks, now);
-    let indent = if under_task { "   " } else { " " };
-    let mut spans = vec![Span::raw(indent)];
+    let mut spans = vec![Span::raw(" ")];
     spans.push(Span::styled(
         format!("{} ", session_mark(session)),
         Style::default().fg(dot),
@@ -521,7 +481,7 @@ mod tests {
     }
 
     #[test]
-    fn task_sessions_gather_under_their_task() {
+    fn task_sessions_sit_flat_in_their_project() {
         crate::test_util::with_temp_home(|| {
             let session = |id: &str, title: &str| SessionInfo {
                 session_id: id.into(),
@@ -576,13 +536,13 @@ mod tests {
                 rows,
                 vec![
                     header("alpha").as_str(),
-                    " 󰢨 Ship it",
-                    "   ● Plan",
-                    "   ● Build",
+                    " ● Plan",
+                    " ● Build",
                     " ● Loose",
                     "",
                     header("beta").as_str(),
                     " ● Other",
+                    "",
                     "",
                 ]
             );
