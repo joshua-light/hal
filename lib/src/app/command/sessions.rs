@@ -24,6 +24,8 @@ pub enum SessionsCommand {
     OpenTerminalHere,
     /// `x` — stage the close confirmation.
     StageConfirmClose,
+    /// `y` in the close confirmation — close the staged session.
+    ConfirmClose,
     /// `z` — ack the selected session's attention state.
     AckSelected,
     /// Space — put the selected session on hold, or release it.
@@ -108,6 +110,7 @@ impl App {
             FocusSelected => return self.focus_selected_session(),
             OpenTerminalHere => self.open_terminal_here(),
             StageConfirmClose => self.enter_confirm_close(),
+            ConfirmClose => self.confirm_close(),
             AckSelected => {
                 self.ack_selected();
             }

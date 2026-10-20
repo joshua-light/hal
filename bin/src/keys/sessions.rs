@@ -1,6 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use hal_lib::app::{App, Command, Tab, View};
-use hal_lib::focus;
 
 /// Sessions- and Global-tab command mapping (Tasks lives in
 /// [`super::tasks::map_tasks_command`]).
@@ -87,17 +86,10 @@ fn map_agent_hotkey(app: &App, key: &KeyEvent, on_sessions: bool) -> Option<Comm
 }
 
 pub(super) fn handle_confirm_close(app: &mut App, key: KeyEvent) {
+    use hal_lib::app::SessionsCommand as S;
     match key.code {
         KeyCode::Char('y') | KeyCode::Char('Y') => {
-            if let Some(pending) = app.take_pending_close() {
-                let ok = focus::close_window(pending.pid);
-                let msg = if ok {
-                    format!("closed {}", pending.display)
-                } else {
-                    format!("failed to close {}", pending.display)
-                };
-                app.set_status(msg);
-            }
+            app.execute(Command::Sessions(S::ConfirmClose));
         }
         KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc | KeyCode::Char('q') => {
             app.cancel_confirm_close();

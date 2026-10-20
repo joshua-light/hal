@@ -201,7 +201,7 @@ impl App {
         self.view = View::Grid;
     }
 
-    pub fn take_pending_close(&mut self) -> Option<PendingClose> {
+    pub(crate) fn take_pending_close(&mut self) -> Option<PendingClose> {
         self.view = View::Grid;
         self.pending_close.take()
     }

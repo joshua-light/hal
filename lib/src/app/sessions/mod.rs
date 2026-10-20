@@ -2,6 +2,7 @@
 //! that starts from a session card.
 //!
 //! - `scan`: applies scan snapshots; view toggles and acks (`z`).
+//! - `close`: closes a session and hides it while its agent exits (`x`).
 //! - `dock`: the split layout's live pane of the selected session.
 //! - `groups`: turns a snapshot into ordered, task-clustered groups.
 //! - `spawn`: spawn watchdogs, placeholder cards, boot-time naming.
@@ -18,6 +19,7 @@ use crate::handoff::Handoff;
 use crate::holds::Holds;
 use crate::models::{ProjectGroup, SessionInfo};
 
+mod close;
 mod dock;
 mod groups;
 mod handoff;
@@ -30,6 +32,7 @@ mod session_finder;
 mod spawn;
 mod task_link_picker;
 
+use close::Closing;
 pub use dock::Dock;
 pub use model_picker::{AgentPickerState, ModelPickerChoice, ModelPickerState};
 pub use rename::RenameSubmit;
@@ -84,6 +87,7 @@ pub struct SessionsView {
     pub show_inactive: bool,
     pub acks: Acks,
     pub holds: Holds,
+    pub(crate) closing: Closing,
     pub(crate) unscanned_titles: UnscannedTitles,
     /// The session marked with `h`, whose last reply the next fresh session
     /// opens with. At most one; the spawn that takes it clears it.
@@ -103,6 +107,7 @@ impl SessionsView {
             show_inactive: false,
             acks: Acks::new(),
             holds: Holds::new(),
+            closing: Closing::default(),
             unscanned_titles: UnscannedTitles::default(),
             handoff: None,
             last_sessions: Vec::new(),

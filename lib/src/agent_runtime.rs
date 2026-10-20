@@ -12,6 +12,10 @@ pub trait AgentRuntime: Send + Sync {
     fn ready_for_input(&self, tmux: &str) -> bool;
     fn send_prompt(&self, tmux: &str, prompt: &str) -> io::Result<()>;
     fn kill_session(&self, tmux: &str) -> io::Result<()>;
+    /// Close the agent `pid`: its tmux session, else its terminal window,
+    /// else the process itself ([`crate::focus::close_window`]). Returns
+    /// once the close is sent, not once the agent has exited.
+    fn close_window(&self, pid: u32) -> bool;
     fn spawn_session(
         &self,
         agent_id: &str,
@@ -57,6 +61,8 @@ pub(crate) mod testing {
         pub prompts: Mutex<Vec<(String, String)>>,
         pub spawns: Mutex<Vec<SpawnCall>>,
         pub kills: Mutex<Vec<String>>,
+        /// The pid of every agent closed.
+        pub closes: Mutex<Vec<u32>>,
         /// The cwd of every terminal spawned.
         pub terminals: Mutex<Vec<String>>,
         /// Name returned by successful spawns.
@@ -73,6 +79,7 @@ pub(crate) mod testing {
                 prompts: Mutex::new(Vec::new()),
                 spawns: Mutex::new(Vec::new()),
                 kills: Mutex::new(Vec::new()),
+                closes: Mutex::new(Vec::new()),
                 terminals: Mutex::new(Vec::new()),
                 spawn_name: "mock-spawn".into(),
                 spawn_error: None,
@@ -99,6 +106,10 @@ pub(crate) mod testing {
         fn kill_session(&self, tmux: &str) -> io::Result<()> {
             self.kills.lock().unwrap().push(tmux.to_string());
             Ok(())
+        }
+        fn close_window(&self, pid: u32) -> bool {
+            self.closes.lock().unwrap().push(pid);
+            true
         }
         fn spawn_session(
             &self,
@@ -154,6 +165,10 @@ impl AgentRuntime for SystemAgentRuntime {
 
     fn kill_session(&self, tmux: &str) -> io::Result<()> {
         crate::send::kill_tmux_session(tmux)
+    }
+
+    fn close_window(&self, pid: u32) -> bool {
+        crate::focus::close_window(pid)
     }
 
     fn spawn_session(

@@ -115,6 +115,7 @@ impl App {
         // instance (or the CLI) regroup the grid without a restart — the
         // same per-tick re-read the scanner does for the title sidecar.
         self.session_task_links = crate::tasks::session_links::load();
+        self.sessions.closing.apply(&mut sessions);
         let acks_active = !self.sessions.acks.is_empty();
         if acks_active {
             // Apply user acks: if a non-Idle session is still at its acked
