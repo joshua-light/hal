@@ -3,6 +3,11 @@
 Every key hal binds, per tab and per popup. The status bar shows the
 common ones for the current view.
 
+Keys are read by position, so they work with the Ukrainian or Russian
+layout switched on: `о` is `j`, `Л` is `K`, `б` is `,`. Text fields (names,
+filters, the pane) keep the letters you type. Punctuation is read as typed,
+so `/` and `.` need the English layout.
+
 ## Global
 
 These work on every tab when no popup is open. `Ctrl+L` also works in popups.

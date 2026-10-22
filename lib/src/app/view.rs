@@ -112,6 +112,38 @@ pub struct PendingClose {
 }
 
 impl App {
+    /// Whether keys go into a text field — a name, a filter, a pane — rather
+    /// than to commands. Keys for commands are read by key, not by layout
+    /// ([`crate::keymap`]); typed text keeps its letters.
+    pub fn types_text(&self) -> bool {
+        match self.view {
+            View::TaskInput
+            | View::TaskTags
+            | View::TaskAttachInput
+            | View::TaskFilter
+            | View::RenameSession
+            | View::ModelPicker
+            | View::TaskLinkPicker
+            | View::SessionFinder
+            | View::GhCreateInput
+            | View::TmuxPane
+            | View::Dock => true,
+            View::FolderPicker => self
+                .folder_picker
+                .as_ref()
+                .is_some_and(|p| p.mode == crate::folder_picker::PickerMode::Places),
+            View::AgentDetail => self.harness.detail.editing.is_some(),
+            View::Grid
+            | View::Popup
+            | View::LiveTail
+            | View::ConfirmClose
+            | View::AgentPicker
+            | View::RespawnPicker
+            | View::TaskKindPicker
+            | View::TaskInfo => false,
+        }
+    }
+
     pub fn set_tab(&mut self, tab: Tab) {
         // Entering the Tasks tab re-reads the board so edits from another
         // instance (or a hand-edited state.json) show up. The reload and the
