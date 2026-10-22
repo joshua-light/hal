@@ -5,12 +5,12 @@
 //! `[ui].dim_unfocused` the other side is drawn dim, as an editor's inactive
 //! pane is.
 
-use crate::ui::palette::{SELECTED_ROW_BG, SEP_GRAY, UNFOCUSED_ROW_BG};
+use crate::ui::palette::{selected_row_bg, separator_fg, unfocused_row_bg};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
+use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 
 /// The sidebar takes a quarter of the width, within these bounds.
@@ -76,8 +76,8 @@ impl Split {
     /// keyboard. The list has no frame to light up, so its cursor does.
     pub fn cursor_bg(&self) -> Color {
         match self.page_focused {
-            true => UNFOCUSED_ROW_BG,
-            false => SELECTED_ROW_BG,
+            true => unfocused_row_bg(),
+            false => selected_row_bg(),
         }
     }
 
@@ -85,11 +85,11 @@ impl Split {
     pub fn page_block(&self, title: Line<'static>) -> Block<'static> {
         let border = match self.page_focused {
             true => Color::White,
-            false => SEP_GRAY,
+            false => separator_fg(),
         };
         Block::default()
             .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
+            .border_type(crate::ui::palette::border_type())
             .border_style(Style::default().fg(border))
             .title(title)
     }
@@ -183,8 +183,8 @@ mod tests {
     #[test]
     fn the_cursor_row_fades_while_the_page_has_the_keyboard() {
         let area = Rect::new(0, 0, 120, 4);
-        assert_eq!(Split::of(area, false).cursor_bg(), SELECTED_ROW_BG);
-        assert_eq!(Split::of(area, true).cursor_bg(), UNFOCUSED_ROW_BG);
+        assert_eq!(Split::of(area, false).cursor_bg(), selected_row_bg());
+        assert_eq!(Split::of(area, true).cursor_bg(), unfocused_row_bg());
     }
 
     #[test]

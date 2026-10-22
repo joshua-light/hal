@@ -10,7 +10,7 @@ use crate::ui::palette::DIM_TEXT;
 use ratatui::layout::{Alignment, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
 pub(crate) fn render_live_tail(frame: &mut Frame, area: Rect, app: &mut App) {
@@ -33,7 +33,7 @@ pub(crate) fn render_live_tail(frame: &mut Frame, area: Rect, app: &mut App) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
+        .border_type(crate::ui::palette::border_type())
         .border_style(Style::default().fg(Color::Rgb(80, 120, 150)))
         .title(Span::styled(
             title,

@@ -12,6 +12,7 @@
 //! - `places`: the folder / places / bookmarks picker.
 //! - `dispatch`: prompts queued for sessions that are still booting.
 //! - `harness_view`, `metrics_view`: the Agents and Metrics tabs.
+//! - `settings`: the settings window (`,`), `[ui]` and `[theme]`.
 //! - `render_state`: layout state the renderer writes back.
 
 use crate::agent_runtime::{AgentRuntime, SystemAgentRuntime};
@@ -39,6 +40,7 @@ mod picker_list;
 mod places;
 mod render_state;
 mod sessions;
+mod settings;
 #[cfg(test)]
 mod test_support;
 mod view;
@@ -59,6 +61,7 @@ pub use sessions::{
     RespawnChoice, RespawnPickerState, SessionFinderChoice, SessionFinderState, SessionsLayout,
     SessionsView, TaskLinkAction, TaskLinkChoice, TaskLinkPickerState,
 };
+pub use settings::{color_text, settings_lines, Setting, SettingKind, SettingsLine, SettingsView};
 pub use view::{visible_tabs, PendingClose, Tab, View, TABS};
 
 pub struct App {
@@ -95,6 +98,8 @@ pub struct App {
     /// State behind [`View::RespawnPicker`] (`R` on the Sessions tab).
     pub respawn_picker: Option<RespawnPickerState>,
     pub task_kind_picker: Option<TaskKindPickerState>,
+    /// State behind [`View::Settings`] (`,` on any tab).
+    pub settings: SettingsView,
     /// Agent used by Sessions-tab new-session actions. Seeded from
     /// `[projects].default_session_agent`; `A` changes it for this run.
     default_session_agent_id: String,
@@ -187,6 +192,7 @@ impl App {
             agent_picker: None,
             respawn_picker: None,
             task_kind_picker: None,
+            settings: SettingsView::default(),
             default_session_agent_id: config::get().default_session_agent_id(),
             task_link_picker: None,
             session_finder: None,

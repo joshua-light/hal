@@ -12,6 +12,7 @@ These work on every tab when no popup is open. `Ctrl+L` also works in popups.
 | `Tab` / `K` | Next tab |
 | `Shift+Tab` / `J` | Previous tab |
 | `q` | Quit |
+| `,` | Settings: layout, theme and colours |
 | `Ctrl+L` | Repaint the screen |
 
 Tabs run Tasks → Sessions → Agents → Metrics; hal opens on Sessions.
@@ -149,6 +150,7 @@ List popups move with `j`/`k` or `↑`/`↓`.
 | Add task | type, `Tab` switch to the context box, `Enter` add |
 | Attach | type, `Tab` switch between file/URL and note, `Enter` attach |
 | Filter | type, `Enter` keep the filter, `Esc` clear it |
+| Settings (`,`) | `h`/`l` or `←`/`→` change, `Enter`/`Space` flip or type a colour, `d` back to the default, `q`/`,` close |
 | Task Info | `j`/`k` attachment, `a` attach, `p` paste note, `c` copy path, `o` open, `x` remove, `PgUp`/`PgDn` scroll, `v`/`q` close |
 
 ### Folder picker

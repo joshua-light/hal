@@ -57,6 +57,8 @@ pub enum View {
     TaskFilter,
     /// Agents tab: runs, artifacts, log and settings of the focused agent.
     AgentDetail,
+    /// The settings window (`,`): layout, theme and colours.
+    Settings,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

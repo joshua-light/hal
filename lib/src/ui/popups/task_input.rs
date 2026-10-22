@@ -3,7 +3,7 @@
 use super::widgets::{key_footer, wrapped_rows};
 use crate::app::{App, TaskField};
 use crate::ui::common::{centered_fixed, popup_block, CURSOR};
-use crate::ui::palette::{ACCENT_BLUE, DIM_TEXT};
+use crate::ui::palette::{accent_fg, DIM_TEXT};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -102,7 +102,7 @@ pub(crate) fn render_task_input(frame: &mut Frame, area: Rect, app: &App) {
         lines.push(Line::from(Span::styled(
             format!("  context ({} chars)", app.tasks.context.chars().count()),
             Style::default()
-                .fg(if on_context { ACCENT_BLUE } else { DIM_TEXT })
+                .fg(if on_context { accent_fg() } else { DIM_TEXT })
                 .add_modifier(Modifier::ITALIC),
         )));
         lines.extend(context_body);

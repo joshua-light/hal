@@ -6,6 +6,7 @@
 //! - `task_input`: add/rename-task popup with its context box
 //! - `line_inputs`: attach and tags editors
 //! - `confirm_close`: close-terminal confirmation
+//! - `settings`: the settings window
 //! - `tmux_pane`: embedded tmux pane
 //! - `live_tail`: live transcript tail
 //! - `transcript`: preview tokenizer and bullet renderers for the live tail
@@ -17,6 +18,7 @@ mod fuzzy_pickers;
 mod line_inputs;
 mod list_pickers;
 mod live_tail;
+mod settings;
 mod task_input;
 mod tmux_pane;
 mod transcript;
@@ -32,5 +34,6 @@ pub(crate) use list_pickers::{
     render_agent_picker, render_respawn_picker, render_task_kind_picker,
 };
 pub(crate) use live_tail::render_live_tail;
+pub(crate) use settings::render_settings;
 pub(crate) use task_input::render_task_input;
 pub(crate) use tmux_pane::render_tmux_pane;

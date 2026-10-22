@@ -167,10 +167,34 @@ pub struct UiConfig {
     /// draw the side without the keyboard dim. Off by default: the page's
     /// frame alone says where typing goes.
     pub dim_unfocused: bool,
+    /// The layout the Sessions tab opens on; `v` still cycles it.
+    pub sessions_layout: StartLayout,
     /// Retired with the Projects layer; accepted and ignored (see
     /// [`Config`](super::Config)'s `_backlog`).
     #[serde(rename = "show_projects_tab")]
     _show_projects_tab: Option<IgnoredAny>,
+}
+
+/// `[ui].sessions_layout`: the Sessions layout hal opens on.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum StartLayout {
+    #[default]
+    Split,
+    List,
+    Grid,
+}
+
+impl StartLayout {
+    pub const ALL: &[Self] = &[Self::Split, Self::List, Self::Grid];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Split => "split",
+            Self::List => "list",
+            Self::Grid => "grid",
+        }
+    }
 }
 
 impl UiConfig {
@@ -196,6 +220,7 @@ impl Default for UiConfig {
             _show_projects_tab: None,
             show_planning_column: false,
             dim_unfocused: false,
+            sessions_layout: StartLayout::default(),
         }
     }
 }

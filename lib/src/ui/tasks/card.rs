@@ -3,11 +3,11 @@ use crate::models::{SessionInfo, SessionState};
 use crate::tasks::activity::Errand;
 use crate::tasks::store::{TaskState, TaskStatus};
 use crate::ui::common::priority_color;
-use crate::ui::palette::{ACCENT_BLUE, DIM_TEXT, DOT_IDLE, KIND_TEAL, META_GRAY, TAG_SLATE};
+use crate::ui::palette::{accent_fg, kind_fg, tag_fg, DIM_TEXT, DOT_IDLE, META_GRAY};
 use ratatui::layout::{Alignment, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
+use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 use std::collections::HashMap;
 
@@ -42,7 +42,7 @@ pub(super) fn render_task_card(
     .alignment(Alignment::Right);
     let mut block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
+        .border_type(crate::ui::palette::border_type())
         .border_style(border_style)
         .title(priority_badge);
     // The kind chip and the tags ride the top-left of the border, mirroring
@@ -60,12 +60,12 @@ pub(super) fn render_task_card(
             chip,
             Style::default()
                 .fg(Color::Black)
-                .bg(KIND_TEAL)
+                .bg(kind_fg())
                 .add_modifier(Modifier::BOLD),
         ));
     }
     if let Some(text) = tags_title_text(&t.tags, budget) {
-        badges.push(Span::styled(text, Style::default().fg(TAG_SLATE)));
+        badges.push(Span::styled(text, Style::default().fg(tag_fg())));
     }
     if !badges.is_empty() {
         block = block.title(Line::from(badges).alignment(Alignment::Left));
@@ -215,7 +215,7 @@ fn meta_line(
         ));
         if let Some(dir) = t.cwd.as_deref().map(dir_basename) {
             spans.push(Span::styled("  ", age_style));
-            spans.push(Span::styled(dir, Style::default().fg(ACCENT_BLUE)));
+            spans.push(Span::styled(dir, Style::default().fg(accent_fg())));
         }
         spans.push(Span::styled("  ", age_style));
     }
@@ -280,7 +280,7 @@ mod tests {
     use super::*;
     use crate::tasks::store::{TaskPriority, TaskStatus};
     use crate::ui::common::buffer_to_string;
-    use crate::ui::palette::BACKLOG_BLUE;
+    use crate::ui::palette::backlog_fg;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
 
@@ -310,7 +310,7 @@ mod tests {
                     t,
                     false,
                     TaskStatus::Backlog,
-                    BACKLOG_BLUE,
+                    backlog_fg(),
                     &sessions,
                     1_000,
                 );

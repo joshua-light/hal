@@ -4,8 +4,8 @@
 use super::widgets::{highlight_spans, render_filter_row, RowStyles};
 use crate::app::{App, FinderLine, PickerRow, SessionFinderChoice};
 use crate::models::{first_line_truncated, SessionState};
-use crate::ui::common::{centered_fixed, popup_block, task_color, Dot, COL_SEP, STATE_DOT};
-use crate::ui::palette::{DIM_TEXT, LABEL_GRAY, MUTED_TEXT, SEP_GRAY};
+use crate::ui::common::{centered_fixed, popup_block, state_dot, task_color, Dot, COL_SEP};
+use crate::ui::palette::{separator_fg, DIM_TEXT, LABEL_GRAY, MUTED_TEXT};
 use chrono::{Local, NaiveDate, TimeZone};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -418,7 +418,7 @@ fn period_heading(label: &str, count: usize, width: usize) -> Line<'static> {
         Span::styled(count, Style::default().fg(Color::DarkGray)),
         Span::styled(
             "─".repeat(width.saturating_sub(used)),
-            Style::default().fg(SEP_GRAY),
+            Style::default().fg(separator_fg()),
         ),
     ])
 }
@@ -440,7 +440,10 @@ fn finder_row(
 
     let mut spans = vec![styles.cursor(selected)];
     spans.push(match state {
-        Some(state) => Span::styled(format!("{STATE_DOT} "), bar.fg(Dot::of(state).color(now))),
+        Some(state) => Span::styled(
+            format!("{} ", state_dot()),
+            bar.fg(Dot::of(state).color(now)),
+        ),
         None => pad(2),
     });
 
@@ -601,7 +604,7 @@ mod task_link_picker_tests {
             // their cells pin the chip color: In *P*rogress → the In Progress
             // column accent, *T*o-Do → the To-Do column accent.
             assert_eq!(cell_fg(&buf, 'P'), Some(Color::LightYellow));
-            assert_eq!(cell_fg(&buf, 'T'), Some(crate::ui::palette::BACKLOG_BLUE));
+            assert_eq!(cell_fg(&buf, 'T'), Some(crate::ui::palette::backlog_fg()));
         });
     }
 }
