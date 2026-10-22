@@ -8,7 +8,9 @@ configuration is `~/.hal/resources.toml`;
 
 - **Accounts** are separate Claude or Codex homes, each with its own login.
 - **Profiles** pair an exact model and effort with the accounts that may run
-  it.
+  it. A Claude profile with `model = "default"` and no effort pins neither:
+  its session runs on the account's own settings, as one you start by hand
+  does, and only the account-wide quota windows apply to it.
 - **Routing** picks profiles by task kind and role. The `task` skill has two
   roles, `implementation` and `verification`. A kind with no route of its
   own for a role falls back to `[routing.default.<role>]`; the broker
