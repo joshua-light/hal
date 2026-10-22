@@ -102,8 +102,11 @@ def load_config():
         if not 0 < account.get('start_percent', settings['start_percent']) <= settings['start_percent']:
             raise ValueError(f'{name}: invalid start_percent reserve')
     for name, profile in cfg.get('profiles', {}).items():
-        if not profile.get('model') or not profile.get('effort') or not profile.get('accounts'):
+        default = profile.get('model') == DEFAULT_MODEL
+        if not profile.get('model') or not (profile.get('effort') or default) or not profile.get('accounts'):
             raise ValueError(f'{name}: model, effort and accounts are required')
+        if default and (profile.get('provider') != 'claude' or profile.get('effort')):
+            raise ValueError(f'{name}: model = "default" is Claude-only and takes no effort')
         window = profile.get('autocompact')
         if window is not None and not (profile.get('provider') == 'claude' and 100_000 <= window <= 1_000_000):
             raise ValueError(f'{name}: autocompact is Claude-only and must be 100000..1000000 tokens')
@@ -176,6 +179,9 @@ def ceiling(cfg, rules, account):
 
 # The cheapest model a wake-up prompt can run on; see `wake`.
 WAKE_MODEL = 'claude-haiku-5-5'
+# A Claude profile whose session runs on the account's own settings, as a
+# session started by hand does: no --model, no --effort.
+DEFAULT_MODEL = 'default'
 
 
 def rpc(account, requests):
@@ -437,8 +443,10 @@ def select(cfg, usage, db, kind, role, exclude=None):
             if db.get('cooldowns', {}).get(pool, 0) > now:
                 continue
             supported = snapshot.get('models', {})
-            if profile['model'] not in supported or profile['effort'] not in supported[profile['model']]:
+            if profile['model'] != DEFAULT_MODEL and (profile['model'] not in supported
+                                                      or profile['effort'] not in supported[profile['model']]):
                 continue
+            # The default model is not known here, so only account-wide windows apply.
             windows = applicable_windows(snapshot, profile['model'])
             if not windows:
                 continue
@@ -872,7 +880,8 @@ def execution(worker, cfg):
     hooks = {'PreToolUse': [{'matcher': '.*', 'hooks': [{'type': 'command', 'command': gate, 'timeout': 15}]}]}
     if account['provider'] == 'claude':
         window = profile.get('autocompact')
-        argv += ['--model', profile['model'], '--effort', profile['effort'],
+        pinned = [] if profile['model'] == DEFAULT_MODEL else ['--model', profile['model'], '--effort', profile['effort']]
+        argv += [*pinned,
                  *(['--autocompact', str(window)] if window else []),
                  '--settings', json.dumps({'hooks': hooks})]
         if resume:
@@ -933,7 +942,7 @@ def reserve(worker, choice, cfg):
         worker.setdefault('tmux_history', []).append(worker['tmux'])
     worker.update(choice)
     profile = cfg['profiles'][choice['profile']]
-    worker.update(model=profile['model'], effort=profile['effort'])
+    worker.update(model=profile['model'], effort=profile.get('effort'))
     worker['generation'] += 1
     worker['tmux'] = 'halr-' + worker['id'][:12] + '-' + str(worker['generation'])
     # A native resume keeps the session id; a hand-off is a new session.
