@@ -63,6 +63,11 @@ pub(super) async fn drain_input(
                     }
                 }
                 Event::Key(key) => {
+                    let key = if app.types_text() {
+                        key
+                    } else {
+                        hal_lib::keymap::to_latin(key)
+                    };
                     // Trace every key so a "my press did nothing" report
                     // can be answered from the log: did it arrive, with
                     // what kind, and which view received it.
