@@ -20,7 +20,12 @@ pub(crate) fn render_settings(frame: &mut Frame, area: Rect, app: &App) {
     let cfg = config::get();
     let view = &app.settings;
 
-    let popup = centered_fixed(area, 64, lines.len() as u16 + 2);
+    // Stop short of the status bar: a rejected colour says why down there.
+    let above_status = Rect {
+        height: area.height.saturating_sub(1),
+        ..area
+    };
+    let popup = centered_fixed(above_status, 64, lines.len() as u16 + 2);
     frame.render_widget(Clear, popup);
     let hints = if view.editing.is_some() {
         " name, 0–255 or #rrggbb · enter:apply · empty:preset · esc:cancel "
