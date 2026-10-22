@@ -72,9 +72,11 @@ pub fn set(cfg: Config) {
 }
 
 /// Edit `config.toml` with `edit`, keeping its comments and layout, and make
-/// the result the live config. The edited file must parse, or nothing is
-/// written: a file hal would reject is worse than the change not landing.
-pub fn update(edit: impl FnOnce(&mut toml_edit::DocumentMut)) -> Result<(), String> {
+/// the result the live config. `edit` also gets the config the file holds
+/// now, which a hand edit since startup may have moved past [`get`]. The
+/// edited file must parse, or nothing is written: a file hal would reject is
+/// worse than the change not landing.
+pub fn update(edit: impl FnOnce(&mut toml_edit::DocumentMut, &Config)) -> Result<(), String> {
     let path = config_path().ok_or("no home directory")?;
     let raw = match std::fs::read_to_string(&path) {
         Ok(s) => s,
@@ -91,14 +93,14 @@ pub fn update(edit: impl FnOnce(&mut toml_edit::DocumentMut)) -> Result<(), Stri
 /// Pure core of [`update`]: the edited text and the config it loads as.
 fn edit_text(
     raw: &str,
-    edit: impl FnOnce(&mut toml_edit::DocumentMut),
+    edit: impl FnOnce(&mut toml_edit::DocumentMut, &Config),
 ) -> Result<(String, Config), String> {
-    toml::from_str::<Config>(raw)
+    let before = toml::from_str::<Config>(raw)
         .map_err(|e| format!("config.toml doesn't load, fix it first: {}", e.message()))?;
     let mut doc: toml_edit::DocumentMut = raw
         .parse()
         .map_err(|e: toml_edit::TomlError| format!("config.toml: {}", e.message()))?;
-    edit(&mut doc);
+    edit(&mut doc, &before);
     let updated = doc.to_string();
     let cfg = toml::from_str::<Config>(&updated).map_err(|e| e.message().to_string())?;
     Ok((updated, cfg))
@@ -169,7 +171,7 @@ mod tests {
     #[test]
     fn an_edit_keeps_comments_and_adds_nested_tables() {
         let raw = "# mine\n[ui]\ncell_width = 50 # wide\n";
-        let (text, cfg) = edit_text(raw, |doc| {
+        let (text, cfg) = edit_text(raw, |doc, _| {
             table_mut(doc, &["ui"]).insert("cell_height", toml_edit::value(8));
             table_mut(doc, &["theme", "colors"]).insert("p1", toml_edit::value("#ff0000"));
         })
@@ -182,11 +184,11 @@ mod tests {
 
     #[test]
     fn an_edit_that_breaks_the_file_is_refused() {
-        let bad = edit_text("", |doc| {
+        let bad = edit_text("", |doc, _| {
             table_mut(doc, &["theme"]).insert("border", toml_edit::value("wavy"));
         });
         assert!(bad.is_err());
-        let broken = edit_text("[ui]\nnope = 1\n", |_| {});
+        let broken = edit_text("[ui]\nnope = 1\n", |_, _| {});
         assert!(broken.unwrap_err().contains("fix it first"));
     }
 

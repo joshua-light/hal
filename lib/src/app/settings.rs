@@ -262,8 +262,10 @@ impl App {
         let Some(s) = self.settings.setting() else {
             return;
         };
-        if let Some(item) = s.step(config::get(), delta) {
-            self.write_setting(s, Some(item));
+        if s.kind != SettingKind::Color {
+            // Step from the file, not the live value: a hand edit since
+            // startup is what the user sees in the file.
+            self.write_setting(s, |file| s.step(file, delta));
         }
     }
 
@@ -283,7 +285,7 @@ impl App {
     /// colour, the preset's).
     pub fn settings_reset(&mut self) {
         if let Some(s) = self.settings.setting() {
-            self.write_setting(s, None);
+            self.write_setting(s, |_| None);
         }
     }
 
@@ -295,7 +297,7 @@ impl App {
         let text = text.trim().to_string();
         if text.is_empty() {
             self.settings.editing = None;
-            self.write_setting(s, None);
+            self.write_setting(s, |_| None);
             return;
         }
         if let Err(e) = text.parse::<ThemeColor>() {
@@ -303,12 +305,19 @@ impl App {
             return;
         }
         self.settings.editing = None;
-        self.write_setting(s, Some(value(text)));
+        self.write_setting(s, |_| Some(value(text)));
     }
 
-    fn write_setting(&mut self, s: Setting, item: Option<toml_edit::Item>) {
+    /// Write the row's new value — `change` sees the file's config and
+    /// gives the value, or `None` to drop the key.
+    fn write_setting(
+        &mut self,
+        s: Setting,
+        change: impl FnOnce(&Config) -> Option<toml_edit::Item>,
+    ) {
         let planning_was = config::get().ui.show_planning_column;
-        let result = config::update(|doc| {
+        let result = config::update(|doc, file| {
+            let item = change(file);
             let t = config::table_mut(doc, s.table);
             match item {
                 Some(item) => {
