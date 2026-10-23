@@ -15,9 +15,9 @@ use crate::models::{
     first_line_truncated, ProjectGroup, SessionInfo, SessionKind, SessionState, TaskBadge,
 };
 use crate::ui::common::{
-    context_window_size, state_color, task_color, Dot, COLD_CACHE_ICON, CURSOR, STATE_DOT,
+    context_window_size, state_color, state_dot, task_color, Dot, COLD_CACHE_ICON, CURSOR,
 };
-use crate::ui::palette::{CONTEXT_GRAY, ICE_BLUE, MUTED_TEXT, SEP_GRAY};
+use crate::ui::palette::{cold_fg, separator_fg, CONTEXT_GRAY, MUTED_TEXT};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -122,7 +122,7 @@ fn render_hold_header(frame: &mut Frame, area: Rect, groups: &[ProjectGroup]) {
         .filter(|g| g.held)
         .map(|g| g.sessions.len())
         .sum();
-    let dot = format!(" {STATE_DOT}");
+    let dot = format!(" {}", state_dot());
     let title = " On hold ";
     let count = format!(" {held} held ");
     let used = dot.chars().count() + title.chars().count() + count.chars().count();
@@ -135,7 +135,7 @@ fn render_hold_header(frame: &mut Frame, area: Rect, groups: &[ProjectGroup]) {
             Style::default().fg(MUTED_TEXT).add_modifier(Modifier::BOLD),
         ),
         Span::styled(count, Style::default().fg(Color::DarkGray)),
-        Span::styled(rule, Style::default().fg(SEP_GRAY)),
+        Span::styled(rule, Style::default().fg(separator_fg())),
     ]);
     frame.render_widget(Paragraph::new(line), area);
 }
@@ -161,13 +161,13 @@ fn render_group_header(frame: &mut Frame, area: Rect, group: &ProjectGroup) {
     ));
     if attn > 0 {
         spans.push(Span::styled(
-            format!("  {STATE_DOT} {attn}"),
+            format!("  {} {attn}", state_dot()),
             Style::default().fg(state_color(&SessionState::WaitingForInput)),
         ));
     }
     spans.push(Span::styled(
         format!("  {}", group.cwd),
-        Style::default().fg(SEP_GRAY),
+        Style::default().fg(separator_fg()),
     ));
 
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
@@ -243,7 +243,7 @@ fn draft_text(draft: &str, width: usize) -> String {
     format!("…{tail}{CURSOR}")
 }
 
-/// A terminal's mark, where an agent draws its [`STATE_DOT`].
+/// A terminal's mark, where an agent draws its [`state_dot`].
 const TERMINAL_ICON: &str = "\u{f120}";
 
 /// The glyph ahead of a session's title, coloured by [`dot_color`]: the
@@ -252,7 +252,7 @@ const TERMINAL_ICON: &str = "\u{f120}";
 /// space.
 fn session_mark(session: &SessionInfo) -> &'static str {
     match session.kind {
-        SessionKind::Agent(_) => STATE_DOT,
+        SessionKind::Agent(_) => state_dot(),
         SessionKind::Terminal => TERMINAL_ICON,
     }
 }
@@ -272,7 +272,7 @@ fn agent_prefix(session: &SessionInfo) -> String {
 /// clock becomes the ice-blue snowflake: restarting beats resuming.
 fn activity_clock(session: &SessionInfo, now: u64) -> (&'static str, Color) {
     if session.cache_cold(now) {
-        (COLD_CACHE_ICON, ICE_BLUE)
+        (COLD_CACHE_ICON, cold_fg())
     } else {
         ("󰔟", Color::DarkGray)
     }

@@ -170,6 +170,10 @@ impl App {
     /// takes the cursor with it. A single-line paste goes to whichever field
     /// is focused.
     pub fn paste_into_input(&mut self, text: &str) -> bool {
+        if let (View::Settings, Some(buf)) = (&self.view, self.settings.editing.as_mut()) {
+            buf.extend(text.chars().filter(|c| !c.is_control()));
+            return true;
+        }
         match self.view {
             View::TaskInput | View::TaskTags | View::TaskAttachInput => {}
             _ => return false,

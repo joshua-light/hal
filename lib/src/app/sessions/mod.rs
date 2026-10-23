@@ -46,14 +46,25 @@ pub use task_link_picker::{TaskLinkAction, TaskLinkChoice, TaskLinkPickerState};
 /// opens on: a narrow list on the left, the selected session's live pane
 /// docked on the right ([`Dock`]). `List` is the full-width table, one
 /// compact row per session; `Grid` is the classic card wall. Runtime
-/// cycle (`v`), in-memory only — resets to `Split` on relaunch, same
-/// lifetime as the `show_*` filters on [`SessionsView`].
+/// cycle (`v`), in-memory only — resets to `[ui].sessions_layout` on
+/// relaunch, same lifetime as the `show_*` filters on [`SessionsView`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SessionsLayout {
     #[default]
     Split,
     List,
     Grid,
+}
+
+impl From<crate::config::StartLayout> for SessionsLayout {
+    fn from(l: crate::config::StartLayout) -> Self {
+        use crate::config::StartLayout;
+        match l {
+            StartLayout::Split => SessionsLayout::Split,
+            StartLayout::List => SessionsLayout::List,
+            StartLayout::Grid => SessionsLayout::Grid,
+        }
+    }
 }
 
 impl SessionsLayout {
@@ -102,7 +113,7 @@ impl SessionsView {
             groups: Vec::new(),
             sel_group: 0,
             sel_in_group: 0,
-            layout: SessionsLayout::default(),
+            layout: crate::config::get().ui.sessions_layout.into(),
             dock: Dock::default(),
             show_inactive: false,
             acks: Acks::new(),

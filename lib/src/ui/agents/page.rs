@@ -4,8 +4,10 @@ use super::{dot, mark};
 use crate::app::{App, Section};
 use crate::harness::{AgentSnapshot, AgentStatus};
 use crate::models::first_line_truncated;
-use crate::ui::common::{age, fmt_cost, selection_stripe, truncate_line, STATE_DOT};
-use crate::ui::palette::{DIM_TEXT, FAINT_TEXT, LABEL_GRAY, MUTED_TEXT, SELECTED_ROW_BG, SEP_GRAY};
+use crate::ui::common::{age, fmt_cost, selection_stripe, state_dot, truncate_line};
+use crate::ui::palette::{
+    selected_row_bg, separator_fg, DIM_TEXT, FAINT_TEXT, LABEL_GRAY, MUTED_TEXT,
+};
 use crate::ui::split::{page_title, Split};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -40,7 +42,7 @@ pub(super) fn render_page(frame: &mut Frame, split: Split, app: &mut App, now: i
     head.push(section_strip(agent, detail.section));
     head.push(Line::from(Span::styled(
         "─".repeat(width),
-        Style::default().fg(SEP_GRAY),
+        Style::default().fg(separator_fg()),
     )));
     let head_h = (head.len() as u16).min(inner.height);
     frame.render_widget(
@@ -114,7 +116,7 @@ fn headline(agent: &AgentSnapshot, now: i64, width: usize) -> Vec<Line<'static>>
     let color = dot(agent).steady();
     let lead = |text: String| {
         Line::from(vec![
-            Span::styled(format!("{STATE_DOT} "), Style::default().fg(color)),
+            Span::styled(format!("{} ", state_dot()), Style::default().fg(color)),
             Span::styled(
                 text,
                 Style::default().fg(color).add_modifier(Modifier::BOLD),
@@ -267,7 +269,7 @@ pub(super) fn render_rows(
         spans.extend(line.spans);
         let mut p = Paragraph::new(truncate_line(Line::from(spans), width));
         if selected {
-            p = p.style(Style::default().bg(SELECTED_ROW_BG));
+            p = p.style(Style::default().bg(selected_row_bg()));
         }
         frame.render_widget(p, Rect::new(area.x, y, area.width, 1));
     }
@@ -281,7 +283,7 @@ pub(super) fn render_pane(frame: &mut Frame, area: Rect, lines: Vec<Line<'static
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
             "─".repeat(area.width as usize),
-            Style::default().fg(SEP_GRAY),
+            Style::default().fg(separator_fg()),
         ))),
         Rect::new(area.x, area.y, area.width, 1),
     );

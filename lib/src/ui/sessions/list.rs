@@ -25,7 +25,7 @@ use crate::app::{App, Targets};
 use crate::models::{first_line_truncated, SessionInfo, SessionKind};
 use crate::ui::common::{ctx_color, format_elapsed, selection_stripe, short_model, Cell, COL_SEP};
 use crate::ui::now_ms;
-use crate::ui::palette::{HANDOFF_BLUE, MUTED_TEXT, SELECTED_ROW_BG};
+use crate::ui::palette::{handoff_fg, selected_row_bg, MUTED_TEXT};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
@@ -301,7 +301,7 @@ fn render_row(
     // The gutter stripe is the cursor, in white; a handoff mark keeps it lit
     // in its own colour whether or not the cursor is there.
     spans.push(if handoff {
-        Span::styled("▌", Style::default().fg(HANDOFF_BLUE))
+        Span::styled("▌", Style::default().fg(handoff_fg()))
     } else {
         selection_stripe(selected)
     });
@@ -323,7 +323,7 @@ fn render_row(
     if selected {
         // Full-row background highlight is the list's selection cue — the
         // grid's double border has no one-row-tall equivalent.
-        row = row.style(Style::default().bg(SELECTED_ROW_BG));
+        row = row.style(Style::default().bg(selected_row_bg()));
     }
     frame.render_widget(row, area);
 }
@@ -443,7 +443,7 @@ mod tests {
             let dot = |y: u16| {
                 (0..100)
                     .map(|x| &buf[(x, y)])
-                    .find(|c| c.symbol() == crate::ui::common::STATE_DOT)
+                    .find(|c| c.symbol() == crate::ui::common::state_dot())
                     .expect("state dot")
                     .fg
             };

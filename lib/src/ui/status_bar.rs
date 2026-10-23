@@ -54,15 +54,19 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
                 // wrap); rare verbs trail. The Space chip is rendered
                 // separately *ahead* of this string below so it is never the
                 // first thing clipped.
-                Tab::Tasks => "a/n:add  enter/f:focus agent  v:info  s:assign agent  S:agent in ~  h/l:col  j/k:task  H/L:move  /:filter  1-4:priority  t:tags  T:kind  r:rename  A:attach  p:paste note  x:delete  u:undo  c:clear done  tab:next  q:quit",
-                Tab::Sessions => "enter/f:type in/resume  /:find any  n:new  h:handoff  R:respawn  A:default agent  N:new+model  p:new in…  i:info  z:ack  r:rename  L:link task  o:shell  M:bookmarks  ←/j/k/l:nav  v:layout  x:close  H:inactive  tab:next  q:quit",
-                Tab::Metrics => "enter:view transcript  j/k:select  r:refresh  tab:next  q:quit",
+                Tab::Tasks => "a/n:add  enter/f:focus agent  v:info  s:assign agent  S:agent in ~  h/l:col  j/k:task  H/L:move  /:filter  1-4:priority  t:tags  T:kind  r:rename  A:attach  p:paste note  x:delete  u:undo  c:clear done  ,:settings  tab:next  q:quit",
+                Tab::Sessions => "enter/f:type in/resume  /:find any  n:new  h:handoff  R:respawn  A:default agent  N:new+model  p:new in…  i:info  z:ack  r:rename  L:link task  o:shell  M:bookmarks  ←/j/k/l:nav  v:layout  x:close  H:inactive  ,:settings  tab:next  q:quit",
+                Tab::Metrics => "enter:view transcript  j/k:select  r:refresh  ,:settings  tab:next  q:quit",
                 Tab::Agents => agents::hints(app),
             },
             View::AgentDetail => agents::hints(app),
             View::Popup => "j/k:scroll  esc:close  q:close",
             View::LiveTail => "j/k:scroll  G:bottom  esc:close",
             View::ConfirmClose => "y:confirm  n/esc:cancel",
+            View::Settings if app.settings.editing.is_some() => {
+                "type a colour  enter:apply  esc:cancel"
+            }
+            View::Settings => "j/k:move  h/l:change  enter:edit  d:default  esc:close",
             View::ModelPicker if app
                 .model_picker
                 .as_ref()

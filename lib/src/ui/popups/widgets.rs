@@ -1,7 +1,7 @@
 //! Building blocks shared by the popups in this module.
 
 use crate::ui::common::{popup_block, CURSOR};
-use crate::ui::palette::{ACCENT_BLUE, DIM_TEXT};
+use crate::ui::palette::{accent_fg, DIM_TEXT};
 use ratatui::layout::{Alignment, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -63,7 +63,7 @@ pub(super) fn render_filter_row(frame: &mut Frame, inner: Rect, filter: &str, co
             Span::styled(
                 " ❯ ",
                 Style::default()
-                    .fg(ACCENT_BLUE)
+                    .fg(accent_fg())
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(

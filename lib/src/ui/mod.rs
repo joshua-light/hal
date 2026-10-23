@@ -91,6 +91,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         View::TaskKindPicker => popups::render_task_kind_picker(frame, frame.area(), app),
         View::TaskInfo => tasks::render_task_info(frame, frame.area(), app),
         View::TaskAttachInput => popups::render_task_attach_input(frame, frame.area(), app),
+        View::Settings => popups::render_settings(frame, frame.area(), app),
         // The filter bar lives inside the tasks body and the rename inside
         // the session's own title (both already rendered above), so editing
         // either needs no overlay.
