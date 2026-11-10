@@ -6,7 +6,7 @@ use crate::ui::artifacts::{
 };
 use crate::ui::common::{centered_rect, popup_block, priority_color};
 use crate::ui::now_ms;
-use crate::ui::palette::{ACCENT_BLUE, DIM_TEXT, FAINT_TEXT, KIND_TEAL, META_GRAY, TAG_SLATE};
+use crate::ui::palette::{accent_fg, kind_fg, tag_fg, DIM_TEXT, FAINT_TEXT, META_GRAY};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -93,7 +93,7 @@ pub(crate) fn render_task_info(frame: &mut Frame, area: Rect, app: &mut App) {
         header_spans.push(Span::raw("  "));
         header_spans.push(Span::styled(
             format!("⛭ {}", kind),
-            Style::default().fg(KIND_TEAL),
+            Style::default().fg(kind_fg()),
         ));
     }
     if !t.tags.is_empty() {
@@ -104,7 +104,7 @@ pub(crate) fn render_task_info(frame: &mut Frame, area: Rect, app: &mut App) {
             .collect::<Vec<_>>()
             .join(" ");
         header_spans.push(Span::raw("  "));
-        header_spans.push(Span::styled(tags, Style::default().fg(TAG_SLATE)));
+        header_spans.push(Span::styled(tags, Style::default().fg(tag_fg())));
     }
     let mut lines: Vec<Line<'static>> = vec![Line::from(header_spans), Line::raw("")];
 
@@ -237,7 +237,7 @@ fn attachment_body(a: &Artifact) -> Vec<Line<'static>> {
         CardKind::Url => {
             lines.push(Line::from(Span::styled(
                 format!("  {}", a.path),
-                Style::default().fg(ACCENT_BLUE),
+                Style::default().fg(accent_fg()),
             )));
         }
         CardKind::Image => {

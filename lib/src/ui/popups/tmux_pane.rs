@@ -6,7 +6,7 @@ use crate::ui::palette::DIM_TEXT;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Span;
-use ratatui::widgets::{Block, BorderType, Borders, Clear};
+use ratatui::widgets::{Block, Borders, Clear};
 use ratatui::Frame;
 
 pub(crate) fn render_tmux_pane(frame: &mut Frame, area: Rect, app: &mut App) {
@@ -20,7 +20,7 @@ pub(crate) fn render_tmux_pane(frame: &mut Frame, area: Rect, app: &mut App) {
     let title = format!(" tmux · {} ", pane.session_name);
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
+        .border_type(crate::ui::palette::border_type())
         .border_style(Style::default().fg(Color::Rgb(120, 140, 180)))
         .title(Span::styled(
             title,

@@ -5,7 +5,7 @@ use super::widgets::{highlight_spans, render_filter_row, RowStyles};
 use crate::app::App;
 use crate::folder_picker::{FolderPicker, PickerMode, PlaceSource};
 use crate::ui::common::{centered_fixed, popup_block, CURSOR};
-use crate::ui::palette::{ACCENT_BLUE, DIM_TEXT};
+use crate::ui::palette::{accent_fg, DIM_TEXT};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -251,7 +251,7 @@ pub(crate) fn render_gh_create_input(frame: &mut Frame, area: Rect, app: &App) {
 
     let cwd_line = Line::from(vec![
         Span::styled(" in ", Style::default().fg(Color::DarkGray)),
-        Span::styled(input.cwd.clone(), Style::default().fg(ACCENT_BLUE)),
+        Span::styled(input.cwd.clone(), Style::default().fg(accent_fg())),
     ]);
 
     let mut name_str = input.name.clone();

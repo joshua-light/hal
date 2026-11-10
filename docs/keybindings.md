@@ -3,6 +3,11 @@
 Every key hal binds, per tab and per popup. The status bar shows the
 common ones for the current view.
 
+Keys are read by position, so they work with the Ukrainian or Russian
+layout switched on: `о` is `j`, `Л` is `K`, `б` is `,`. Text fields (names,
+filters, the pane) keep the letters you type. Punctuation is read as typed,
+so `/` and `.` need the English layout.
+
 ## Global
 
 These work on every tab when no popup is open. `Ctrl+L` also works in popups.
@@ -12,6 +17,7 @@ These work on every tab when no popup is open. `Ctrl+L` also works in popups.
 | `Tab` / `K` | Next tab |
 | `Shift+Tab` / `J` | Previous tab |
 | `q` | Quit |
+| `,` | Settings: layout, theme and colours |
 | `Ctrl+L` | Repaint the screen |
 
 Tabs run Tasks → Sessions → Agents → Metrics; hal opens on Sessions.
@@ -149,6 +155,7 @@ List popups move with `j`/`k` or `↑`/`↓`.
 | Add task | type, `Tab` switch to the context box, `Enter` add |
 | Attach | type, `Tab` switch between file/URL and note, `Enter` attach |
 | Filter | type, `Enter` keep the filter, `Esc` clear it |
+| Settings (`,`) | `h`/`l` or `←`/`→` change, `Enter`/`Space` flip or type a colour, `d` back to the default, `q`/`,` close |
 | Task Info | `j`/`k` attachment, `a` attach, `p` paste note, `c` copy path, `o` open, `x` remove, `PgUp`/`PgDn` scroll, `v`/`q` close |
 
 ### Folder picker

@@ -9,6 +9,7 @@
 //! - `pickers`: model, agent, respawn, task-kind and task-link pickers.
 //! - `metrics`: the Metrics tab.
 //! - `pane`: the embedded tmux pane, popup or docked.
+//! - `settings`: the settings window.
 
 use crate::scan_msg::ScanMsg;
 use crate::term::Term;
@@ -22,6 +23,7 @@ mod metrics;
 mod pane;
 mod pickers;
 mod sessions;
+mod settings;
 mod tasks;
 
 /// Map a key press onto a [`Command`] when a converted arm covers it.
@@ -93,6 +95,7 @@ fn handle_view_key(app: &mut App, key: KeyEvent, scan_tx: &mpsc::Sender<ScanMsg>
         View::TaskLinkPicker => pickers::task_link(app, key),
         View::SessionFinder => sessions::handle_finder(app, key),
         View::RenameSession => sessions::handle_rename(app, key),
+        View::Settings => settings::handle(app, key),
         View::Popup => match key.code {
             KeyCode::Esc | KeyCode::Char('q') => app.close_popup(),
             KeyCode::Down | KeyCode::Char('j') => app.scroll_down(),

@@ -7,7 +7,7 @@ use crate::ui::palette::{DIM_TEXT, LABEL_GRAY};
 use ratatui::layout::{Alignment, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use ratatui::Frame;
 use std::collections::HashMap;
 
@@ -83,7 +83,7 @@ pub(super) fn render_task_column(
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
+        .border_type(crate::ui::palette::border_type())
         .border_style(border_style)
         .title(Line::from(title_spans));
     frame.render_widget(block, area);

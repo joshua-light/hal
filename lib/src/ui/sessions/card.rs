@@ -2,7 +2,7 @@ use super::card_body::body_lines;
 use super::{agent_prefix, badge_color, dot_color, draft_text, session_mark, CardMarks};
 use crate::models::{first_line_truncated, SessionInfo, SessionState, TaskBadge};
 use crate::ui::common::{priority_color, state_color, COLD_CACHE_ICON};
-use crate::ui::palette::{HANDOFF_BLUE, SEP_GRAY};
+use crate::ui::palette::{handoff_fg, separator_fg};
 use ratatui::layout::{Alignment, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -55,26 +55,32 @@ fn border(session: &SessionInfo, marks: CardMarks) -> (BorderType, Color) {
         ..
     } = marks;
     let border_color = if handoff {
-        HANDOFF_BLUE
+        handoff_fg()
     } else if selected {
         Color::White
     } else if held {
-        SEP_GRAY
+        separator_fg()
     } else if session.needs_attention() {
         // The state colour tells a Question (blue) from a plain wait
         // (green).
         state_color(&session.state)
     } else {
-        SEP_GRAY
+        separator_fg()
     };
 
+    let base = crate::ui::palette::border_type();
     let border_type = if session.needs_attention() {
-        // Weight makes "needs you" categorical, not a hue shift.
-        BorderType::Thick
+        // Weight makes "needs you" categorical, not a hue shift. A theme
+        // that draws every border thick leaves double lines to say it.
+        if base == BorderType::Thick {
+            BorderType::Double
+        } else {
+            BorderType::Thick
+        }
     } else if session.state == SessionState::Inactive {
         BorderType::LightDoubleDashed
     } else {
-        BorderType::Rounded
+        base
     };
     (border_type, border_color)
 }
@@ -278,7 +284,7 @@ mod tests {
                     .clone()
             };
             assert_eq!(
-                cell(crate::ui::common::STATE_DOT).fg,
+                cell(crate::ui::common::state_dot()).fg,
                 super::state_color(&state)
             );
             let word = cell("F");
@@ -301,7 +307,7 @@ mod tests {
         let buf = render(&s, 42, 7);
         let dot = (0..buf.area().width)
             .map(|x| &buf[(x, 0)])
-            .find(|c| c.symbol() == crate::ui::common::STATE_DOT)
+            .find(|c| c.symbol() == crate::ui::common::state_dot())
             .expect("state dot in title");
         assert_eq!(dot.fg, crate::ui::common::working_blink(NOW));
         let plain = buffer_to_string(&buf);
@@ -322,7 +328,7 @@ mod tests {
             "title row: {top}"
         );
         assert!(
-            !top.contains(crate::ui::common::STATE_DOT),
+            !top.contains(crate::ui::common::state_dot()),
             "title row: {top}"
         );
         assert!(!top.contains("[Terminal]"), "title row: {top}");

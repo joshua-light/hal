@@ -14,13 +14,13 @@ use crate::models;
 use crate::models::first_line_truncated;
 use crate::models::SessionState;
 use crate::tasks::store::{TaskPriority, TaskStatus};
-use crate::ui::palette::{BACKLOG_BLUE, DOT_IDLE, GRAY_80, PURPLE, SEP_GRAY};
+use crate::ui::palette::{backlog_fg, border_type, planning_fg, separator_fg, theme, DOT_IDLE};
 use crate::usage::UsageInfo;
 use chrono::{DateTime, Local, TimeZone};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 
 /// Canonical (icon, accent color) for a task status: the Tasks-board column
 /// palette. Every surface that colors a status (board columns, the task-link picker)
@@ -28,23 +28,24 @@ use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
 /// on [`TaskStatus::board_label`].
 pub(crate) fn task_status_meta(status: TaskStatus) -> (&'static str, Color) {
     match status {
-        TaskStatus::Backlog => ("󰄱", BACKLOG_BLUE),
-        TaskStatus::Planning => ("󰟶", PURPLE),
-        TaskStatus::Running => ("󰒓", Color::LightYellow),
-        TaskStatus::Review => ("󱋲", Color::LightCyan),
-        TaskStatus::Done => ("󰸞", Color::LightGreen),
+        TaskStatus::Backlog => ("󰄱", backlog_fg()),
+        TaskStatus::Planning => ("󰟶", planning_fg()),
+        TaskStatus::Running => ("󰒓", theme().running),
+        TaskStatus::Review => ("󱋲", theme().review),
+        TaskStatus::Done => ("󰸞", theme().done),
     }
 }
 
-/// Badge colour per priority: P1 red, P2 yellow, P3 green, P4 blue. Light
-/// variants so the bold badge stays legible on the dark board. Shared by the
+/// Badge colour per priority: by default P1 red, P2 yellow, P3 green, P4
+/// blue, light variants so the bold badge stays legible on the dark board
+/// (`[theme]` may change them). Shared by the
 /// Tasks-board chip and the session-card task badge so the hues can't drift.
 pub(crate) fn priority_color(p: TaskPriority) -> Color {
     match p {
-        TaskPriority::P1 => Color::LightRed,
-        TaskPriority::P2 => Color::LightYellow,
-        TaskPriority::P3 => Color::LightGreen,
-        TaskPriority::P4 => Color::LightBlue,
+        TaskPriority::P1 => theme().p1,
+        TaskPriority::P2 => theme().p2,
+        TaskPriority::P3 => theme().p3,
+        TaskPriority::P4 => theme().p4,
     }
 }
 
@@ -80,7 +81,7 @@ pub(crate) const CURSOR: char = '▎';
 pub(crate) fn popup_block<'a>(title: impl Into<ratatui::text::Line<'a>>) -> Block<'a> {
     Block::default()
         .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
+        .border_type(border_type())
         .border_style(Style::default().fg(Color::White))
         .title(title)
 }
@@ -124,7 +125,7 @@ pub fn build_usage_line(u: &UsageInfo) -> Line<'static> {
     let mut spans: Vec<Span> = Vec::new();
     let label_style = Style::default().fg(Color::DarkGray);
     let reset_style = Style::default().fg(Color::Rgb(90, 90, 100));
-    let sep_style = Style::default().fg(SEP_GRAY);
+    let sep_style = Style::default().fg(separator_fg());
     // A reading the store could not refresh is still the best number we
     // have; it is shown, but no longer in white.
     let pct_style = if u.health == crate::usage::Health::Ready {
@@ -180,11 +181,11 @@ fn append_bar(spans: &mut Vec<Span<'static>>, pct: u8, width: u16) {
 
 fn bar_color(pct: u8) -> Color {
     if pct > 80 {
-        Color::Red
+        theme().usage_high
     } else if pct >= 50 {
-        Color::Yellow
+        theme().usage_mid
     } else {
-        Color::Green
+        theme().usage_low
     }
 }
 
@@ -198,25 +199,27 @@ fn format_reset(iso: &str, fmt: &str) -> Option<String> {
     )
 }
 
-/// The one glyph every session and agent draws for its state. The
-/// state lives in its colour alone ([`Dot`]), so a column of dots reads at
-/// a glance.
-pub(crate) const STATE_DOT: &str = "●";
+/// The one glyph every session and agent draws for its state
+/// (`[theme].state_dot`). The state lives in its colour alone ([`Dot`]), so
+/// a column of dots reads at a glance.
+pub(crate) fn state_dot() -> &'static str {
+    crate::config::get().theme.file.state_dot.glyph()
+}
 
-/// What a [`STATE_DOT`] says, whatever it belongs to: one palette for the
+/// What a [`state_dot`] says, whatever it belongs to: one palette for the
 /// Sessions and Agents lists, so a colour means the same thing on
 /// every tab.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Dot {
-    /// Work under way: white, blinking where it is drawn live.
+    /// Work under way: white by default, blinking where it is drawn live.
     Working,
-    /// Done, or stopped, and waiting for you: green.
+    /// Done, or stopped, and waiting for you: green by default.
     Waiting,
-    /// Asking you something: blue.
+    /// Asking you something: blue by default.
     Asking,
-    /// It went wrong: red.
+    /// It went wrong: red by default.
     Failed,
-    /// Nothing to do: dark gray.
+    /// Nothing to do: dark gray by default.
     Resting,
 }
 
@@ -240,19 +243,20 @@ impl Dot {
 
     /// The colour where nothing blinks: a border, a count.
     pub fn steady(self) -> Color {
+        let t = theme();
         match self {
-            Dot::Working => Color::White,
-            Dot::Waiting => Color::Green,
-            Dot::Asking => Color::LightBlue,
-            Dot::Failed => Color::Red,
-            Dot::Resting => GRAY_80,
+            Dot::Working => t.working,
+            Dot::Waiting => t.waiting,
+            Dot::Asking => t.asking,
+            Dot::Failed => t.failed,
+            Dot::Resting => t.resting,
         }
     }
 
     /// The dot an agent draws: steady, so a running one is plain
     /// white rather than half the time the gray of a resting one.
     pub fn span(self) -> Span<'static> {
-        Span::styled(STATE_DOT, Style::default().fg(self.steady()))
+        Span::styled(state_dot(), Style::default().fg(self.steady()))
     }
 }
 
@@ -261,12 +265,13 @@ pub(crate) fn state_color(state: &SessionState) -> Color {
     Dot::of(state).steady()
 }
 
-/// A working dot's colour at `now`: white and light gray in turn, half a
-/// second each — both brighter than a resting dot. The draw loop's clock
-/// tick repaints at that rate.
+/// A working dot's colour at `now`: the working colour and light gray in
+/// turn, half a second each — both brighter than a resting dot. The draw
+/// loop's clock tick repaints at that rate. `[theme].blink = false` holds
+/// it on the working colour.
 pub(crate) fn working_blink(now: u64) -> Color {
-    if (now / 500).is_multiple_of(2) {
-        Color::White
+    if !crate::config::get().theme.file.blink || (now / 500).is_multiple_of(2) {
+        theme().working
     } else {
         DOT_IDLE
     }
@@ -276,17 +281,17 @@ pub(crate) fn working_blink(now: u64) -> Color {
 /// agent. The frame derives from wall-clock time, so it advances
 /// on every repaint: at least once a second from the clock tick, faster
 /// while scan events stream in. Motion is the point: a turning glyph reads
-/// as alive where a static one reads as ambient.
-const SPINNER_FRAMES: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-
+/// as alive where a static one reads as ambient. `[theme].spinner` picks
+/// the frames.
 pub(crate) fn spinner_frame(now: u64) -> &'static str {
-    SPINNER_FRAMES[((now / 120) % SPINNER_FRAMES.len() as u64) as usize]
+    let frames = crate::config::get().theme.file.spinner.frames();
+    frames[((now / 120) % frames.len() as u64) as usize]
 }
 
 /// Snowflake marking a cold prompt cache (see
 /// [`crate::models::SessionInfo::cache_cold`]): the session's next turn
 /// re-ingests everything anyway, so restarting it is free. Rendered in
-/// [`crate::ui::palette::ICE_BLUE`] wherever the surrounding style allows.
+/// [`crate::ui::palette::cold_fg()`] wherever the surrounding style allows.
 pub(crate) const COLD_CACHE_ICON: &str = "󰜗";
 
 pub(crate) fn short_model(model: &str) -> &str {

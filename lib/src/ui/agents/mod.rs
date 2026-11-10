@@ -56,7 +56,7 @@ fn dot(agent: &AgentSnapshot) -> Dot {
 /// Key hints for the Agents list and the page.
 pub(crate) fn hints(app: &App) -> &'static str {
     if app.view != View::AgentDetail {
-        return "f/enter:page  space:on/off  p:run now  n:claude here  j/k:agent  tab:next  q:quit";
+        return "f/enter:page  space:on/off  p:run now  n:claude here  j/k:agent  ,:settings  tab:next  q:quit";
     }
     let d = &app.harness.detail;
     if d.editing.is_some() {

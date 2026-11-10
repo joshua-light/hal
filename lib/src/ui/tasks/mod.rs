@@ -17,7 +17,7 @@ use crate::app::{visible_task_columns, App, Targets, View};
 use crate::models;
 use crate::ui::common::CURSOR;
 use crate::ui::now_ms;
-use crate::ui::palette::{ACCENT_BLUE, DIM_TEXT, DOT_IDLE, LABEL_GRAY};
+use crate::ui::palette::{accent_fg, DIM_TEXT, DOT_IDLE, LABEL_GRAY};
 use column::render_task_column;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -109,7 +109,7 @@ fn render_filter_bar(frame: &mut Frame, area: Rect, app: &App, editing: bool) {
         "  /:edit  esc:clear"
     };
     let line = Line::from(vec![
-        Span::styled(" / ", Style::default().fg(ACCENT_BLUE)),
+        Span::styled(" / ", Style::default().fg(accent_fg())),
         Span::styled(
             query,
             Style::default()

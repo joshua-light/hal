@@ -1,9 +1,9 @@
 use super::{activity_clock, context_pct};
 use crate::models::{first_line_truncated, short_sid, SessionInfo, SessionState};
 use crate::ui::common::{
-    ctx_bar, ctx_color, format_elapsed, format_tool_label, short_model, STATE_DOT,
+    ctx_bar, ctx_color, format_elapsed, format_tool_label, short_model, state_dot,
 };
-use crate::ui::palette::{CONTEXT_GRAY, MUTED_TEXT, PURPLE};
+use crate::ui::palette::{planning_fg, CONTEXT_GRAY, MUTED_TEXT};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
@@ -73,7 +73,7 @@ fn activity_line(session: &SessionInfo, inner_w: usize) -> Option<Line<'static>>
             let hint = session.current_tool.as_ref()?.hint.clone()?;
             let hint = first_line_truncated(&hint, inner_w.saturating_sub(2).max(6));
             Some(Line::from(Span::styled(
-                format!("{STATE_DOT} {hint}"),
+                format!("{} {hint}", state_dot()),
                 Style::default()
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),
@@ -101,7 +101,7 @@ fn activity_line(session: &SessionInfo, inner_w: usize) -> Option<Line<'static>>
             } else if session.is_thinking {
                 Some(Line::from(Span::styled(
                     "󰛨 thinking…".to_string(),
-                    Style::default().fg(PURPLE),
+                    Style::default().fg(planning_fg()),
                 )))
             } else {
                 None

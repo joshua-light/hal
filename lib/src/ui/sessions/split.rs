@@ -15,7 +15,7 @@ use crate::app::{App, Dock, View};
 use crate::models::{first_line_truncated, ProjectGroup, SessionInfo, SessionKind, SessionState};
 use crate::ui::now_ms;
 use crate::ui::palette::{
-    DIM_TEXT, HANDOFF_ROW_BG, SELECTED_HANDOFF_ROW_BG, SEP_GRAY, UNFOCUSED_HANDOFF_ROW_BG,
+    handoff_row_bg, selected_handoff_row_bg, separator_fg, unfocused_handoff_row_bg, DIM_TEXT,
 };
 use crate::ui::split::Split;
 use ratatui::layout::{Alignment, Rect};
@@ -159,7 +159,7 @@ fn render_project_header(frame: &mut Frame, area: Rect, group: &ProjectGroup) {
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(rule, Style::default().fg(SEP_GRAY)),
+        Span::styled(rule, Style::default().fg(separator_fg())),
     ]);
     frame.render_widget(Paragraph::new(line), area);
 }
@@ -200,9 +200,9 @@ fn render_session(
 /// while the dock has the keyboard (see [`Split::cursor_bg`]).
 fn row_background(marks: CardMarks, split: Split) -> Option<Color> {
     match (marks.selected, marks.handoff) {
-        (true, true) if split.page_focused => Some(UNFOCUSED_HANDOFF_ROW_BG),
-        (true, true) => Some(SELECTED_HANDOFF_ROW_BG),
-        (false, true) => Some(HANDOFF_ROW_BG),
+        (true, true) if split.page_focused => Some(unfocused_handoff_row_bg()),
+        (true, true) => Some(selected_handoff_row_bg()),
+        (false, true) => Some(handoff_row_bg()),
         (true, false) => Some(split.cursor_bg()),
         (false, false) => None,
     }
@@ -324,7 +324,7 @@ mod tests {
     use super::*;
     use crate::agent::AgentKind;
     use crate::models::ProjectGroup;
-    use crate::ui::palette::{SELECTED_ROW_BG, UNFOCUSED_ROW_BG};
+    use crate::ui::palette::{selected_row_bg, unfocused_row_bg};
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
 
@@ -466,17 +466,17 @@ mod tests {
                     .expect("render");
                 terminal.backend().buffer()[(0, y)].bg
             };
-            assert_eq!(bg(&mut app, 1), SELECTED_ROW_BG);
-            assert_eq!(bg(&mut app, 2), HANDOFF_ROW_BG);
+            assert_eq!(bg(&mut app, 1), selected_row_bg());
+            assert_eq!(bg(&mut app, 2), handoff_row_bg());
             app.sessions.sel_in_group = 1;
             assert_eq!(bg(&mut app, 1), Color::Reset);
-            assert_eq!(bg(&mut app, 2), SELECTED_HANDOFF_ROW_BG);
+            assert_eq!(bg(&mut app, 2), selected_handoff_row_bg());
 
             // With the keyboard in the dock, the cursor fades.
             app.view = View::Dock;
-            assert_eq!(bg(&mut app, 2), UNFOCUSED_HANDOFF_ROW_BG);
+            assert_eq!(bg(&mut app, 2), unfocused_handoff_row_bg());
             app.sessions.sel_in_group = 0;
-            assert_eq!(bg(&mut app, 1), UNFOCUSED_ROW_BG);
+            assert_eq!(bg(&mut app, 1), unfocused_row_bg());
         });
     }
 

@@ -1,7 +1,7 @@
 //! Header bands: the title bar and the tab strip.
 
 use crate::app::{visible_tabs, App};
-use crate::ui::palette::{ACCENT_BLUE, SEP_GRAY};
+use crate::ui::palette::{accent_fg, separator_fg};
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -27,7 +27,8 @@ pub(super) fn render_tab_strip(frame: &mut Frame, area: Rect, app: &mut App) {
     let rule_y = area.y + area.height - 1;
 
     let mut names: Vec<Span<'static>> = vec![Span::raw("  ")];
-    let mut rule: Vec<Span<'static>> = vec![Span::styled("──", Style::default().fg(SEP_GRAY))];
+    let mut rule: Vec<Span<'static>> =
+        vec![Span::styled("──", Style::default().fg(separator_fg()))];
     // Icons advance one cell, so a name's width is its char count.
     let mut x = area.x + 2;
     for tab in visible_tabs() {
@@ -43,25 +44,25 @@ pub(super) fn render_tab_strip(frame: &mut Frame, area: Rect, app: &mut App) {
                 Style::default()
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD),
-                Span::styled("━".repeat(width), Style::default().fg(ACCENT_BLUE)),
+                Span::styled("━".repeat(width), Style::default().fg(accent_fg())),
             )
         } else {
             (
                 Style::default().fg(TAB_GRAY),
-                Span::styled("─".repeat(width), Style::default().fg(SEP_GRAY)),
+                Span::styled("─".repeat(width), Style::default().fg(separator_fg())),
             )
         };
         names.push(Span::styled(name, name_style));
         rule.push(rule_span);
     }
     names.push(Span::styled(
-        "   ⇥/K next · ⇧⇥/J prev tab",
+        "   ⇥/K next · ⇧⇥/J prev tab · , settings",
         Style::default().fg(HINT_GRAY),
     ));
     let drawn: usize = rule.iter().map(|s| s.content.chars().count()).sum();
     rule.push(Span::styled(
         "─".repeat((area.width as usize).saturating_sub(drawn)),
-        Style::default().fg(SEP_GRAY),
+        Style::default().fg(separator_fg()),
     ));
 
     let row = |y| Rect::new(area.x, y, area.width, 1);
@@ -90,7 +91,7 @@ pub(super) fn render_title_bar(frame: &mut Frame, area: Rect, app: &App) {
     let mut right_spans = build_session_count_spans(&app.session_counts);
     let usage_spans = app.usage_line.spans.iter().cloned();
     if !right_spans.is_empty() && app.usage_line.width() > 0 {
-        right_spans.push(Span::styled(" │ ", Style::default().fg(SEP_GRAY)));
+        right_spans.push(Span::styled(" │ ", Style::default().fg(separator_fg())));
     }
     right_spans.extend(usage_spans);
     let right_line = Line::from(right_spans);
@@ -125,7 +126,7 @@ fn build_session_count_spans(c: &crate::sessions::count::SessionCounts) -> Vec<S
     let num_style = Style::default()
         .fg(Color::White)
         .add_modifier(Modifier::BOLD);
-    let sep_style = Style::default().fg(SEP_GRAY);
+    let sep_style = Style::default().fg(separator_fg());
     vec![
         Span::styled(" today ", label_style),
         Span::styled(c.today.to_string(), num_style),

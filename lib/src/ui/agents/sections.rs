@@ -4,7 +4,7 @@ use crate::app::Detail;
 use crate::harness::settings::{Setting, SETTINGS};
 use crate::harness::{AgentSnapshot, LogLine, Note, Run, TickRecord};
 use crate::ui::common::{age, fmt_cost, format_tokens, pad, pad_left, spinner_frame};
-use crate::ui::palette::{ACCENT_BLUE, DIM_TEXT, FAINT_TEXT, LABEL_GRAY};
+use crate::ui::palette::{accent_fg, DIM_TEXT, FAINT_TEXT, LABEL_GRAY};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -181,7 +181,7 @@ fn note_row(note: &Note, now: i64) -> Line<'static> {
         ),
     ];
     if note.r#ref.is_some() {
-        spans.push(Span::styled("󰌷 ", Style::default().fg(ACCENT_BLUE)));
+        spans.push(Span::styled("󰌷 ", Style::default().fg(accent_fg())));
     } else {
         spans.push(Span::raw("  "));
     }
@@ -224,8 +224,8 @@ pub(super) fn render_artifacts(
     ];
     if let Some(r) = &note.r#ref {
         lines.push(Line::from(vec![
-            Span::styled("󰌷 ", Style::default().fg(ACCENT_BLUE)),
-            Span::styled(r.clone(), Style::default().fg(ACCENT_BLUE)),
+            Span::styled("󰌷 ", Style::default().fg(accent_fg())),
+            Span::styled(r.clone(), Style::default().fg(accent_fg())),
             Span::styled("   f opens it", Style::default().fg(DIM_TEXT)),
         ]));
     }

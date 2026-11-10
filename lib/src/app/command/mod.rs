@@ -47,6 +47,8 @@ pub enum GlobalCommand {
     },
     /// A click on the tab strip; `m` on the Sessions tab opens Metrics.
     SetTab(Tab),
+    /// `,`: the settings window.
+    OpenSettings,
 }
 
 /// Side effects [`App::execute`] cannot perform in-process: they need the
@@ -102,6 +104,10 @@ impl App {
                 let was_metrics = self.current_tab == Tab::Metrics;
                 self.set_tab(tab);
                 self.metrics_scan_effect(was_metrics)
+            }
+            GlobalCommand::OpenSettings => {
+                self.open_settings();
+                Vec::new()
             }
         }
     }
