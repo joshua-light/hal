@@ -26,6 +26,7 @@ import fcntl
 import hashlib
 import json
 import os
+import pwd
 import re
 from pathlib import Path
 import selectors
@@ -898,9 +899,11 @@ def launch(worker, cfg):
     name_session(worker, cfg)
     execute = [sys.executable, str(Path(__file__).resolve()), '_exec', '--worker', worker['id'],
                '--generation', str(worker['generation'])]
+    # A login shell: under launchd the supervisor has neither $SHELL nor the profile's PATH and tokens.
+    shell = os.environ.get('SHELL') or pwd.getpwuid(os.getuid()).pw_shell or '/bin/sh'
     argv = ['/usr/bin/env', 'HAL_RESOURCE_CONFIG=' + str(config_path()),
             'HAL_RESOURCE_DIR=' + str(root()), 'HAL_BINARY=' + os.environ.get('HAL_BINARY', 'hal'),
-            os.environ.get('SHELL', '/bin/sh'), '-ic', 'exec ' + shlex.join(execute)]
+            shell, '-lic', 'exec ' + shlex.join(execute)]
     result = run(['tmux', 'new-session', '-d', '-s', worker['tmux'], '-c', worker['cwd'], *argv])
     if result.returncode:
         raise ValueError('tmux worker launch failed')
