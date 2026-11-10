@@ -139,6 +139,27 @@ PROJECT="keep-project"
             snapshot['models'] = {'gpt-6-astra': ['high']}
         self.assertIsNone(self.choose())
 
+    def test_a_default_profile_runs_on_the_account_settings(self):
+        text = self.config_file.read_text().replace(
+            'profiles = ["sonnet-medium", "luna-medium"]', 'profiles = ["as-session"]')
+        self.config_file.write_text(text + '\n[profiles.as-session]\nprovider = "claude"\nmodel = "default"\n'
+                                    'accounts = ["cc-1", "cc-2"]\n')
+        self.cfg = broker.load_config()
+        for snapshot in self.usage.values():
+            snapshot['models'] = {}
+        worker = self.start()
+        self.assertEqual(worker['profile'], 'as-session')
+        command, _ = broker.execution(worker, self.cfg)
+        self.assertNotIn('--model', command)
+        self.assertNotIn('--effort', command)
+
+    def test_a_default_profile_is_claude_only_and_takes_no_effort(self):
+        for extra in ('provider = "claude"\nmodel = "default"\neffort = "high"\naccounts = ["cc-1"]\n',
+                      'provider = "codex"\nmodel = "default"\naccounts = ["codex-1"]\n'):
+            self.config_file.write_text((REPO / 'contrib/resources.toml').read_text() + '\n[profiles.bad]\n' + extra)
+            with self.assertRaises(ValueError):
+                broker.load_config()
+
     def test_a_policy_may_spend_the_reserve_the_others_leave_alone(self):
         rules = self.cfg['routing']['project']['implementation']
         for snapshot in self.usage.values():
