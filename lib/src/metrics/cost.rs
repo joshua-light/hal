@@ -33,11 +33,12 @@ const fn rates(input: f64, output: f64, cache_read: f64) -> ModelPricing {
 /// Rates for a known Claude family, ignoring a trailing `-YYYYMMDD` suffix.
 ///
 /// Source: https://platform.claude.com/docs/en/about-claude/pricing (checked
-/// 2026-10-23). Cache reads are 0.1x input except Opus 5.5 and Sonnet 5.5
-/// (0.05x) and Fable 5.1 (0.025x). Haiku 5.5 is left out: its price depends
+/// 2026-11-10). Cache reads are 0.1x input except Opus 5.5 and Sonnet 5.5
+/// (0.05x) and Fable 5.2 and 5.1 (0.025x). Haiku 5.5 is left out: its price depends
 /// on prompt length (5x above 100k tokens), which a flat rate can't express.
 pub(super) fn known_pricing(model: &str) -> Option<ModelPricing> {
     match strip_date_suffix(model) {
+        "claude-fable-5-2" => Some(rates(8.0, 40.0, 0.20)),
         "claude-fable-5-1" => Some(rates(10.0, 50.0, 0.25)),
         "claude-fable-5" => Some(rates(10.0, 50.0, 1.0)),
         "claude-opus-5-5" => Some(rates(4.0, 20.0, 0.20)),
@@ -116,6 +117,11 @@ mod tests {
         assert_eq!(opus.cache_read_per_mtok, 0.20);
         assert_eq!(opus.cache_creation_per_mtok, 5.0);
         assert_eq!(p("claude-sonnet-5-5").cache_read_per_mtok, 0.10);
+        let fable = p("claude-fable-5-2");
+        assert_eq!(fable.input_per_mtok, 8.0);
+        assert_eq!(fable.output_per_mtok, 40.0);
+        assert_eq!(fable.cache_read_per_mtok, 0.20);
+        assert_eq!(fable.cache_creation_per_mtok, 10.0);
         assert_eq!(p("claude-fable-5-1").cache_read_per_mtok, 0.25);
         assert_eq!(p("claude-fable-5").cache_read_per_mtok, 1.0);
         assert_eq!(p("claude-opus-4-8").output_per_mtok, 25.0);

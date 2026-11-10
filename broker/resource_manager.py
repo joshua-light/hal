@@ -105,7 +105,7 @@ def load_config():
     for name, profile in cfg.get('profiles', {}).items():
         default = profile.get('model') == DEFAULT_MODEL
         if not profile.get('model') or not (profile.get('effort') or default) or not profile.get('accounts'):
-            raise ValueError(f'{name}: model, effort and accounts are required')
+            raise ValueError(f'{name}: model, accounts and (unless model = "default") effort are required')
         if default and (profile.get('provider') != 'claude' or profile.get('effort')):
             raise ValueError(f'{name}: model = "default" is Claude-only and takes no effort')
         window = profile.get('autocompact')
@@ -901,6 +901,14 @@ def execution(worker, cfg):
     return argv, env
 
 
+def passwd_shell():
+    # A uid with no passwd entry (some containers) raises KeyError.
+    try:
+        return pwd.getpwuid(os.getuid()).pw_shell
+    except KeyError:
+        return None
+
+
 def launch(worker, cfg):
     # Stable generation-specific name makes crash-after-spawn reconciliation idempotent.
     if tmux_exists(worker['tmux']):
@@ -909,7 +917,7 @@ def launch(worker, cfg):
     execute = [sys.executable, str(Path(__file__).resolve()), '_exec', '--worker', worker['id'],
                '--generation', str(worker['generation'])]
     # A login shell: under launchd the supervisor has neither $SHELL nor the profile's PATH and tokens.
-    shell = os.environ.get('SHELL') or pwd.getpwuid(os.getuid()).pw_shell or '/bin/sh'
+    shell = os.environ.get('SHELL') or passwd_shell() or '/bin/sh'
     argv = ['/usr/bin/env', 'HAL_RESOURCE_CONFIG=' + str(config_path()),
             'HAL_RESOURCE_DIR=' + str(root()), 'HAL_BINARY=' + os.environ.get('HAL_BINARY', 'hal'),
             shell, '-lic', 'exec ' + shlex.join(execute)]
