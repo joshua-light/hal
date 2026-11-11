@@ -1,5 +1,5 @@
-//! The settings window (`,`): the `[ui]` and `[theme]` knobs of
-//! `config.toml`, changed in place. Every change rewrites the file through
+//! The settings window (`,`): the key scheme and the `[ui]` and `[theme]`
+//! knobs of `config.toml`, changed in place. Every change rewrites the file through
 //! [`config::update`] and repaints at once.
 
 use super::{App, View};
@@ -40,6 +40,7 @@ pub enum SettingsLine {
     Setting(Setting),
 }
 
+const KEYS: &[&str] = &["ide", "vim"];
 const LAYOUTS: &[&str] = &["split", "list", "grid"];
 const PRESETS: &[&str] = &["default", "nord", "gruvbox", "catppuccin", "high-contrast"];
 const BORDERS: &[&str] = &["rounded", "plain", "thick", "double"];
@@ -47,6 +48,7 @@ const SPINNERS: &[&str] = &["braille", "dots", "line", "arc", "static"];
 const DOTS: &[&str] = &["circle", "diamond", "square", "ring"];
 
 const UI: &[&str] = &["ui"];
+const SPAWN: &[&str] = &["spawn"];
 const THEME: &[&str] = &["theme"];
 const COLORS: &[&str] = &["theme", "colors"];
 
@@ -64,10 +66,18 @@ const fn setting(
     })
 }
 
-/// Every line of the window, in order: layout, then style, then one row
-/// per palette role.
+/// Every line of the window, in order: keys, layout, then style, then one
+/// row per palette role.
 pub fn settings_lines() -> Vec<SettingsLine> {
     let mut lines = vec![
+        SettingsLine::Heading("Keys"),
+        setting(UI, "keys", "Key scheme", SettingKind::Choice(KEYS)),
+        setting(
+            SPAWN,
+            "ask_name",
+            "Ask for a session name",
+            SettingKind::Toggle,
+        ),
         SettingsLine::Heading("Layout"),
         setting(
             UI,
@@ -128,6 +138,8 @@ impl Setting {
     pub fn value(&self, cfg: &Config) -> String {
         let (ui, t) = (&cfg.ui, &cfg.theme.file);
         match self.key {
+            "keys" => ui.keys.config_value().into(),
+            "ask_name" => on_off(cfg.spawn.ask_name),
             "sessions_layout" => ui.sessions_layout.key().into(),
             "cell_height" => ui.cell_height.to_string(),
             "cell_width" => ui.cell_width.to_string(),
@@ -332,6 +344,8 @@ impl App {
             self.set_error(e);
             return;
         }
+        self.keys = config::get().ui.keys;
+        self.ask_spawn_name = config::get().spawn.ask_name;
         // Hiding or showing Planning renumbers the board's columns.
         if config::get().ui.show_planning_column != planning_was {
             let (col, row) = (self.tasks.col, self.tasks.row);
@@ -345,6 +359,7 @@ mod tests {
     use super::*;
     use crate::config::theme::{BorderStyle, SpinnerStyle, StateDotStyle, ThemePreset};
     use crate::config::StartLayout;
+    use crate::keymap::Scheme;
 
     /// The window's word lists follow each enum's `ALL`, so a choice it
     /// offers is always one the parser takes.
@@ -353,6 +368,7 @@ mod tests {
         fn keys<T: Copy>(all: &[T], key: fn(T) -> &'static str) -> Vec<&'static str> {
             all.iter().map(|&v| key(v)).collect()
         }
+        assert_eq!(KEYS, keys(&Scheme::ALL, Scheme::config_value));
         assert_eq!(LAYOUTS, keys(StartLayout::ALL, StartLayout::key));
         assert_eq!(PRESETS, keys(ThemePreset::ALL, ThemePreset::key));
         assert_eq!(BORDERS, keys(BorderStyle::ALL, BorderStyle::key));

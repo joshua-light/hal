@@ -2,7 +2,7 @@
 //!
 //! - `folder_picker`: new-session / assign folder picker and gh-create input
 //! - `fuzzy_pickers`: type-to-filter model, task-link and session-finder pickers
-//! - `list_pickers`: j/k agent, respawn and task-kind pickers
+//! - `list_pickers`: agent, respawn and task-kind pickers
 //! - `task_input`: add/rename-task popup with its context box
 //! - `line_inputs`: attach and tags editors
 //! - `confirm_close`: close-terminal confirmation

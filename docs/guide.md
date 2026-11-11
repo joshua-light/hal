@@ -1,7 +1,8 @@
 # How hal works
 
 How the Tasks board, deep links, persistent agents and account moves
-behave. For keys see [keybindings.md](keybindings.md); for settings see
+behave. Keys are named as the default IDE scheme has them; see
+[keybindings.md](keybindings.md) for both schemes; for settings see
 [configuration.md](configuration.md); for verb syntax run `hal help <verb>`.
 
 ## Tasks board
@@ -17,11 +18,11 @@ You can check cards off by hand, or hand one to an agent:
    to investigate and present a plan first, and the card moves to Planning.
 2. `Space` sends "Proceed with the implementation." and moves the card to
    In Progress. If the session died, hal resumes it first.
-3. `f` attaches the agent's pane, resuming the session if needed.
+3. `Enter` attaches the agent's pane, resuming the session if needed.
 4. The agent opens a pull request and notes it on the card with `PR:`. That
    note moves the card to Review.
 
-Moving a card to Done closes its live session but keeps the binding, so `f`
+Moving a card to Done closes its live session but keeps the binding, so `Enter`
 on a Done card still reopens the transcript. Cards whose agent waits on you
 float to the top of Planning and In Progress.
 
@@ -64,7 +65,7 @@ Columns sort by priority first (P1–P4). The add popup reads `#tag` and `!1`–
 inline, so `fix the parser #bug !1` makes a tagged P1 card. Its context box
 becomes the card's first note.
 
-`u` undoes the last delete or clear. Every removed card is also appended to
+`Ctrl+Z` (`u` in the Vim scheme) undoes the last delete or clear. Every removed card is also appended to
 `~/.hal/tasks-archive-v2.json`.
 
 ## Deep links
@@ -124,13 +125,13 @@ ones that run first and the paused or disabled ones after them, each by its
 dot and name; the selected agent's page shows:
 
 - **Runs**: each remembered run, with its transcript.
-- **Artifacts**: the agent's notes; `f` opens a note's `--ref`.
+- **Artifacts**: the agent's notes; `Enter` opens a note's `--ref`.
 - **Log**: `events.jsonl`, which records runs, poll failures, halts and edits
   made in the hub. It answers "why didn't it run?".
 - **Settings**: model, effort, interval, budgets and more. Edits keep
   `agent.toml`'s comments, are validated, and apply on the next run.
 
-A run has no terminal, so it never shows on the Sessions tab. `n` opens an
+A run has no terminal, so it never shows on the Sessions tab. `Ctrl+N` (`n` in the Vim scheme) opens an
 interactive session in the agent's folder, primed with why it last failed.
 Commands and the folder layout: `hal help agent` and
 [cli-reference.md](cli-reference.md).
@@ -138,7 +139,7 @@ Commands and the folder layout: `hal help agent` and
 ## Handing off to a fresh session
 
 `h` on the Sessions tab marks a session (light-blue border or gutter) and
-takes its last reply. The next session you start — `n`, `N`, an agent
+takes its last reply. The next session you start — `Ctrl+N`, `N`, an agent
 hotkey, `p`, `M` — opens with that reply typed into its input as
 `<context>…</context>`, unsent. Add what to do with it and press Enter: a
 fresh session that continues where the old one stopped, without compacting.

@@ -1,78 +1,28 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use hal_lib::app::{App, Command, Tab, View};
+use hal_lib::keymap;
 
-/// Sessions- and Global-tab command mapping (Tasks lives in
-/// [`super::tasks::map_tasks_command`]).
-pub(super) fn map_sessions_command(
-    app: &App,
-    key: &KeyEvent,
-    on_sessions: bool,
-) -> Option<Command> {
-    use hal_lib::app::{GlobalCommand as G, SessionsCommand as S};
-    if let Some(cmd) = map_agent_hotkey(app, key, on_sessions) {
-        return Some(cmd);
+/// Sessions-tab command mapping, and the Enter that submits its two text
+/// popups.
+pub(super) fn map_sessions_command(app: &App, key: &KeyEvent) -> Option<Command> {
+    use hal_lib::app::SessionsCommand as S;
+    let enter = key.code == KeyCode::Enter;
+    match app.view {
+        View::Grid if app.current_tab == Tab::Sessions => {
+            map_agent_hotkey(key).or_else(|| keymap::resolve(app.keys.maps().sessions, key))
+        }
+        View::SessionFinder if enter => Some(Command::Sessions(S::ConfirmSessionFinder)),
+        View::RenameSession if enter => Some(Command::Sessions(S::SubmitRename)),
+        _ => None,
     }
-    let cmd = match (&app.view, key.code) {
-        (View::Grid, KeyCode::Char('q')) => Command::Global(G::Quit),
-        (View::Grid, KeyCode::Tab | KeyCode::Char('K')) => {
-            Command::Global(G::CycleTab { back: false })
-        }
-        (View::Grid, KeyCode::BackTab | KeyCode::Char('J')) => {
-            Command::Global(G::CycleTab { back: true })
-        }
-        (View::Grid, KeyCode::Char(',')) => Command::Global(G::OpenSettings),
-        (View::Grid, KeyCode::Char('m')) if on_sessions => Command::Global(G::SetTab(Tab::Metrics)),
-        (View::Grid, KeyCode::Right | KeyCode::Char('l')) if on_sessions => {
-            Command::Sessions(S::NavRight)
-        }
-        (View::Grid, KeyCode::Left) if on_sessions => Command::Sessions(S::NavLeft),
-        (View::Grid, KeyCode::Char('h')) if on_sessions => Command::Sessions(S::ToggleHandoff),
-        (View::Grid, KeyCode::Down | KeyCode::Char('j')) if on_sessions => {
-            Command::Sessions(S::NavDown)
-        }
-        (View::Grid, KeyCode::Up | KeyCode::Char('k')) if on_sessions => {
-            Command::Sessions(S::NavUp)
-        }
-        (View::Grid, KeyCode::Char('i')) if on_sessions => Command::Sessions(S::OpenDetailPopup),
-        (View::Grid, KeyCode::Char('H')) if on_sessions => Command::Sessions(S::ToggleShowInactive),
-        (View::Grid, KeyCode::Char('v')) if on_sessions => Command::Sessions(S::ToggleLayout),
-        (View::Grid, KeyCode::Char('f') | KeyCode::Enter) if on_sessions => {
-            Command::Sessions(S::FocusSelected)
-        }
-        (View::Grid, KeyCode::Char('t')) if on_sessions => Command::Sessions(S::OpenTerminalHere),
-        (View::Grid, KeyCode::Char('x')) if on_sessions => Command::Sessions(S::StageConfirmClose),
-        (View::Grid, KeyCode::Char(' ')) if on_sessions => Command::Sessions(S::ToggleHold),
-        (View::Grid, KeyCode::Char('z')) if on_sessions => Command::Sessions(S::AckSelected),
-        (View::Grid, KeyCode::Char('n')) if on_sessions => Command::Sessions(S::SpawnAgentHere),
-        (View::Grid, KeyCode::Char('N')) if on_sessions => Command::Sessions(S::OpenModelPicker),
-        (View::Grid, KeyCode::Char('A')) if on_sessions => Command::Sessions(S::OpenAgentPicker),
-        (View::Grid, KeyCode::Char('R')) if on_sessions => Command::Sessions(S::OpenRespawnPicker),
-        (View::Grid, KeyCode::Char('M')) if on_sessions => {
-            Command::Sessions(S::OpenBookmarksPicker)
-        }
-        // Matches plain `p` and ⌘p alike — modifiers are deliberately not
-        // checked here, so terminals that forward Cmd (kitty protocol)
-        // land on the same arm.
-        (View::Grid, KeyCode::Char('p')) if on_sessions => Command::Sessions(S::OpenPlacesPicker),
-        (View::Grid, KeyCode::Char('L')) if on_sessions => Command::Sessions(S::OpenTaskLinkPicker),
-        (View::Grid, KeyCode::Char('/')) if on_sessions => Command::Sessions(S::OpenSessionFinder),
-        (View::SessionFinder, KeyCode::Enter) => Command::Sessions(S::ConfirmSessionFinder),
-        (View::Grid, KeyCode::Char('r')) if on_sessions => Command::Sessions(S::OpenRenameSession),
-        (View::RenameSession, KeyCode::Enter) => Command::Sessions(S::SubmitRename),
-        _ => return None,
-    };
-    Some(cmd)
 }
 
 /// `[agents.<id>].hotkey` bindings on the Sessions grid. Checked before the
-/// built-in table so a user who binds `N` to Claude gets Claude, not the
+/// scheme's table so a user who binds `N` to Claude gets Claude, not the
 /// model picker — the config doc says custom hotkeys shadow built-ins.
 /// Ctrl/Alt chords are left alone; Shift is what makes an uppercase char.
-fn map_agent_hotkey(app: &App, key: &KeyEvent, on_sessions: bool) -> Option<Command> {
+fn map_agent_hotkey(key: &KeyEvent) -> Option<Command> {
     use hal_lib::app::SessionsCommand as S;
-    if !on_sessions || app.view != View::Grid {
-        return None;
-    }
     if key
         .modifiers
         .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)

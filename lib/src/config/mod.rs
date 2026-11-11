@@ -164,9 +164,65 @@ fn load() -> Config {
     }
 }
 
+/// Set `[table].key` in the config file, creating the file or the table as
+/// needed. Comments and layout survive. A file that does not parse is left
+/// alone: rewriting it would throw away whatever the user was in the middle
+/// of.
+///
+/// [`get`] keeps the values it loaded at startup; the caller holds the live
+/// one.
+pub fn save(table: &str, key: &str, value: toml_edit::Value) -> Result<(), String> {
+    let path = config_path().ok_or("no home directory")?;
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("{}: {}", path.display(), e)),
+    };
+    let updated = set_value(&raw, table, key, value)?;
+    // The typed parse rejects what the document parse lets through, such as
+    // a second value of the wrong type under the same table.
+    toml::from_str::<Config>(&updated).map_err(|e| format!("config.toml: {}", e))?;
+    crate::persist::write_atomic(&path, updated.as_bytes())
+        .map_err(|e| format!("{}: {}", path.display(), e))
+}
+
+fn set_value(
+    raw: &str,
+    table: &str,
+    key: &str,
+    mut value: toml_edit::Value,
+) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = raw.parse().map_err(|e| format!("config.toml: {}", e))?;
+    let t = doc
+        .entry(table)
+        .or_insert(toml_edit::table())
+        .as_table_like_mut()
+        .ok_or_else(|| format!("config.toml: [{}] is not a table", table))?;
+    match t.get_mut(key).and_then(toml_edit::Item::as_value_mut) {
+        // Keep the old value's trailing comment.
+        Some(old) => {
+            *value.decor_mut() = old.decor().clone();
+            *old = value;
+        }
+        None => {
+            t.insert(key, toml_edit::Item::Value(value));
+        }
+    }
+    Ok(doc.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keys_default_to_ide_and_read_vim() {
+        use crate::keymap::Scheme;
+        let cfg: Config = toml::from_str("").unwrap();
+        assert_eq!(cfg.ui.keys, Scheme::Ide);
+        let cfg: Config = toml::from_str("[ui]\nkeys = \"vim\"\n").unwrap();
+        assert_eq!(cfg.ui.keys, Scheme::Vim);
+    }
 
     #[test]
     fn an_edit_keeps_comments_and_adds_nested_tables() {

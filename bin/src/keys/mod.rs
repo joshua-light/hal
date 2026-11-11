@@ -2,6 +2,10 @@
 //! ([`map_command`] -> `App::execute` -> [`crate::effects`]); keys no command
 //! covers go to the current view's bin-side handler.
 //!
+//! Which key does what comes from the tables of the key scheme in force
+//! ([`hal_lib::keymap`]). Only text inputs, type-to-filter pickers and the
+//! pane match on key codes here: they take the same keys under every scheme.
+//!
 //! - `sessions`: Sessions-tab commands, close confirmation, session finder,
 //!   rename.
 //! - `tasks`, `harness`: the Tasks and Agents tabs.
@@ -13,8 +17,9 @@
 
 use crate::scan_msg::ScanMsg;
 use crate::term::Term;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use hal_lib::app::{App, Command, Tab, View};
+use hal_lib::keymap::{self, Scheme, ScrollKey};
 use tokio::sync::mpsc;
 
 mod folder_picker;
@@ -28,21 +33,21 @@ mod tasks;
 
 /// Map a key press onto a [`Command`] when a converted arm covers it.
 ///
-/// `None` sends the key on to [`handle_key`]'s per-view handlers.
-pub(super) fn map_command(
-    app: &App,
-    key: &KeyEvent,
-    on_sessions: bool,
-    on_tasks: bool,
-    on_agents: bool,
-) -> Option<Command> {
-    if let Some(cmd) = tasks::map_tasks_command(app, key, on_tasks) {
-        return Some(cmd);
-    }
-    if let Some(cmd) = harness::map_harness_command(app, key, on_agents) {
-        return Some(cmd);
-    }
-    sessions::map_sessions_command(app, key, on_sessions)
+/// `None` sends the key on to [`handle_key`]'s per-view handlers. A tab's
+/// own keys come first, then the ones every tab shares; the scheme's tables
+/// keep the two apart.
+pub(super) fn map_command(app: &App, key: &KeyEvent) -> Option<Command> {
+    let maps = app.keys.maps();
+    let on_grid = app.view == View::Grid;
+    tasks::map_tasks_command(app, key)
+        .or_else(|| harness::map_harness_command(app, key))
+        .or_else(|| sessions::map_sessions_command(app, key))
+        .or_else(|| {
+            on_grid
+                .then(|| keymap::resolve(maps.global, key))
+                .flatten()
+                .map(Command::Global)
+        })
 }
 
 /// Dispatch a single key press: commands first, then the Tasks modal
@@ -54,13 +59,12 @@ pub(crate) async fn handle_key(
     scan_tx: &mpsc::Sender<ScanMsg>,
     detail_tx: &mpsc::Sender<String>,
 ) {
-    let on_tab = |tab: Tab| app.view == View::Grid && app.current_tab == tab;
-    let on_sessions = on_tab(Tab::Sessions);
-    let on_tasks = on_tab(Tab::Tasks);
-    let on_agents = on_tab(Tab::Agents);
-    let mut effects = match map_command(app, &key, on_sessions, on_tasks, on_agents) {
+    let mut effects = match map_command(app, &key) {
         Some(cmd) => app.execute(cmd),
         None => {
+            if is_stray_vim_key(app, &key) {
+                app.set_status("j/k are Vim keys: press , and set Keys to Vim".into());
+            }
             handle_view_key(app, key, scan_tx);
             Vec::new()
         }
@@ -71,6 +75,17 @@ pub(crate) async fn handle_key(
     for effect in effects {
         crate::effects::apply_effect(app, effect, terminal, scan_tx, detail_tx).await;
     }
+}
+
+/// Whether the key is `j` or `k` pressed on a tab under the IDE scheme,
+/// which binds neither: most likely a Vim user after the default changed.
+fn is_stray_vim_key(app: &App, key: &KeyEvent) -> bool {
+    app.keys == Scheme::Ide
+        && app.view == View::Grid
+        && matches!(key.code, KeyCode::Char('j' | 'k'))
+        && !key
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
 }
 
 /// Keys no command covers: the Tasks modal editors, then the view's own
@@ -96,33 +111,25 @@ fn handle_view_key(app: &mut App, key: KeyEvent, scan_tx: &mpsc::Sender<ScanMsg>
         View::SessionFinder => sessions::handle_finder(app, key),
         View::RenameSession => sessions::handle_rename(app, key),
         View::Settings => settings::handle(app, key),
-        View::Popup => match key.code {
-            KeyCode::Esc | KeyCode::Char('q') => app.close_popup(),
-            KeyCode::Down | KeyCode::Char('j') => app.scroll_down(),
-            KeyCode::Up | KeyCode::Char('k') => app.scroll_up(),
-            _ => {}
+        View::Popup => match keymap::resolve(app.keys.maps().popup, &key) {
+            Some(ScrollKey::Close) => app.close_popup(),
+            Some(ScrollKey::Down) => app.scroll_down(),
+            Some(ScrollKey::Up) => app.scroll_up(),
+            Some(ScrollKey::Bottom) | None => {}
         },
-        View::LiveTail => match key.code {
-            KeyCode::Esc | KeyCode::Char('q') => {
+        View::LiveTail => {
+            let key = keymap::resolve(app.keys.maps().live_tail, &key);
+            if key == Some(ScrollKey::Close) {
                 app.close_live_tail();
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                if let Some(ref mut lv) = app.live_view {
-                    lv.scroll_down();
+            } else if let Some(lv) = app.live_view.as_mut() {
+                match key {
+                    Some(ScrollKey::Down) => lv.scroll_down(),
+                    Some(ScrollKey::Up) => lv.scroll_up(),
+                    Some(ScrollKey::Bottom) => lv.scroll_bottom(),
+                    Some(ScrollKey::Close) | None => {}
                 }
             }
-            KeyCode::Up | KeyCode::Char('k') => {
-                if let Some(ref mut lv) = app.live_view {
-                    lv.scroll_up();
-                }
-            }
-            KeyCode::Char('G') => {
-                if let Some(ref mut lv) = app.live_view {
-                    lv.scroll_bottom();
-                }
-            }
-            _ => {}
-        },
+        }
         _ => {}
     }
 }

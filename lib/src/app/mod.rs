@@ -19,6 +19,7 @@ use crate::agent_runtime::{AgentRuntime, SystemAgentRuntime};
 use crate::bookmarks::Bookmarks;
 use crate::config;
 use crate::folder_picker::FolderPicker;
+use crate::keymap::Scheme;
 use crate::live_view::LiveView;
 use crate::models::{SessionDetail, SessionInfo};
 use crate::sessions::count::SessionCounts;
@@ -70,6 +71,9 @@ pub struct App {
     pub metrics: MetricsView,
     pub harness: HarnessView,
     pub tasks: TasksView,
+    /// The key scheme in force: `[ui].keys`, which the settings window
+    /// changes.
+    pub keys: Scheme,
     pub view: View,
     pub detail: Option<SessionDetail>,
     pub detail_loading: bool,
@@ -173,6 +177,7 @@ impl App {
             metrics: MetricsView::new(),
             harness: HarnessView::default(),
             tasks: TasksView::new(),
+            keys: config::get().ui.keys,
             view: View::Grid,
             detail: None,
             detail_loading: false,

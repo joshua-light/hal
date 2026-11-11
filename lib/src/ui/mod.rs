@@ -4,6 +4,7 @@
 //!
 //! - `chrome`: title bar and tab strip
 //! - `status_bar`: key hints, status message and refresh age
+//! - `hints`: state-dependent hint lines the bar and the popups share
 //! - `popups`: overlays drawn over the body
 //! - `common`, `palette`: helpers and colours shared across the UI
 //! - `tasks`, `sessions`, `agents`, `metrics`: one module per tab
@@ -14,6 +15,7 @@ pub mod agents;
 pub mod artifacts;
 mod chrome;
 pub mod common;
+mod hints;
 pub mod metrics;
 pub mod palette;
 pub mod popups;

@@ -312,7 +312,7 @@ pub(super) fn render_settings(
                 Line::from(Span::styled(e.clone(), Style::default().fg(Color::Red))),
                 Line::default(),
                 Line::from(Span::styled(
-                    "Settings need a spec that loads. n opens Claude in the agent's folder to fix it.",
+                    "Settings need a spec that loads. Start a Claude session in the agent's folder to fix it.",
                     Style::default().fg(DIM_TEXT),
                 )),
             ];

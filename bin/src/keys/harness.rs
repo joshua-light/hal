@@ -1,20 +1,16 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use hal_lib::app::{App, Command, HarnessCommand as H, Section, View};
+use hal_lib::app::{App, Command, HarnessCommand as H, Tab, View};
+use hal_lib::keymap;
 
-/// Agents list and page key mapping. `f` gives the page the keyboard the way
-/// it gives a session's pane the keyboard on the Sessions tab, and on the
-/// page it opens the selected thing: a run's transcript, an artifact, a
-/// setting.
-pub(super) fn map_harness_command(app: &App, key: &KeyEvent, on_agents: bool) -> Option<Command> {
+/// Agents list and page key mapping. The key that gives the page the
+/// keyboard is the one that gives a session's pane the keyboard on the
+/// Sessions tab, and on the page it opens the selected thing: a run's
+/// transcript, an artifact, a setting.
+pub(super) fn map_harness_command(app: &App, key: &KeyEvent) -> Option<Command> {
+    let maps = app.keys.maps();
     let editing = app.harness.detail.editing.is_some();
     let cmd = match (&app.view, key.code) {
-        (View::Grid, _) if !on_agents => return None,
-        (View::Grid, KeyCode::Down | KeyCode::Char('j')) => H::NavDown,
-        (View::Grid, KeyCode::Up | KeyCode::Char('k')) => H::NavUp,
-        (View::Grid, KeyCode::Enter | KeyCode::Char('f') | KeyCode::Char('i')) => H::OpenDetail,
-        (View::Grid, KeyCode::Char(' ')) => H::ToggleOn,
-        (View::Grid, KeyCode::Char('p')) => H::RunNow,
-        (View::Grid, KeyCode::Char('n')) => H::NewSession,
+        (View::Grid, _) if app.current_tab == Tab::Agents => keymap::resolve(maps.agents, key)?,
 
         // Typing a setting's value: every printable key is text.
         (View::AgentDetail, KeyCode::Esc) if editing => H::EditCancel,
@@ -27,24 +23,7 @@ pub(super) fn map_harness_command(app: &App, key: &KeyEvent, on_agents: bool) ->
         }
         (View::AgentDetail, _) if editing => return None,
 
-        (View::AgentDetail, KeyCode::Esc | KeyCode::F(1) | KeyCode::Char('q')) => H::CloseDetail,
-        (View::AgentDetail, KeyCode::Tab | KeyCode::Right | KeyCode::Char('l')) => H::NextSection,
-        (View::AgentDetail, KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h')) => {
-            H::PrevSection
-        }
-        (View::AgentDetail, KeyCode::Char(c @ '1'..='4')) => {
-            H::ShowSection(Section::ALL[c as usize - '1' as usize])
-        }
-        (View::AgentDetail, KeyCode::Down | KeyCode::Char('j')) => H::DetailDown,
-        (View::AgentDetail, KeyCode::Up | KeyCode::Char('k')) => H::DetailUp,
-        (View::AgentDetail, KeyCode::Enter | KeyCode::Char('f') | KeyCode::Char('o')) => {
-            H::Activate
-        }
-        (View::AgentDetail, KeyCode::Char('e')) => H::EditSetting,
-        (View::AgentDetail, KeyCode::Char(' ')) => H::ToggleOn,
-        (View::AgentDetail, KeyCode::Char('p')) => H::RunNow,
-        (View::AgentDetail, KeyCode::Char('n')) => H::NewSession,
-        (View::AgentDetail, KeyCode::Char('R')) => H::Reset,
+        (View::AgentDetail, _) => keymap::resolve(maps.agent_page, key)?,
         _ => return None,
     };
     Some(Command::Harness(cmd))

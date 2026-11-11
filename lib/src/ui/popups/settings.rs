@@ -4,6 +4,7 @@
 use crate::app::{settings_lines, App, SettingKind, SettingsLine};
 use crate::config;
 use crate::config::theme::ThemeColor;
+use crate::keymap::{self, Hint};
 use crate::ui::common::{centered_fixed, pad, popup_block, CURSOR};
 use crate::ui::palette::{selected_row_bg, DIM_TEXT, LABEL_GRAY};
 use ratatui::layout::Rect;
@@ -28,9 +29,10 @@ pub(crate) fn render_settings(frame: &mut Frame, area: Rect, app: &App) {
     let popup = centered_fixed(above_status, 64, lines.len() as u16 + 2);
     frame.render_widget(Clear, popup);
     let hints = if view.editing.is_some() {
-        " name, 0–255 or #rrggbb · enter:apply · empty:preset · esc:cancel "
+        " name, 0–255 or #rrggbb · enter:apply · empty:preset · esc:cancel ".to_string()
     } else {
-        " j/k:move · h/l:change · enter:edit · d:default · esc:close "
+        let keys = keymap::hints_with(app.keys.maps().settings, " · ", |_| Hint::Keep);
+        format!(" {keys} ")
     };
     let block = popup_block(Span::styled(
         " Settings · ~/.hal/config.toml ",

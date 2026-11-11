@@ -2,6 +2,7 @@ use super::Effect;
 use crate::agent::AgentKind;
 use crate::app::{App, RenameSubmit, SessionsLayout};
 use crate::config;
+use crate::keymap::{self, FolderKey};
 use crate::models::SessionKind;
 use crate::{models, spawn, title};
 
@@ -136,7 +137,11 @@ impl App {
             OpenPlacesPicker => self.enter_session_places_picker(),
             OpenBookmarksPicker => {
                 if !self.enter_bookmarks_picker() {
-                    self.set_status("no bookmarks — press N then m on a folder to add one".into());
+                    let key = keymap::key_for(self.keys.maps().folders, FolderKey::Bookmark);
+                    self.set_status(format!(
+                        "no bookmarks — {} on a folder in the folder picker adds one",
+                        key
+                    ));
                 }
             }
             OpenSessionFinder => {

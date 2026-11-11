@@ -1,51 +1,34 @@
+#[cfg(test)]
+use crossterm::event::KeyModifiers;
 use crossterm::event::{KeyCode, KeyEvent};
 use hal_lib::app::{App, Command, Tab, TasksCommand, View};
+use hal_lib::keymap::{self, BoardKey, TaskInfoKey};
 
 /// Map a Tasks-board or Tasks-modal-submit key onto a [`Command`]. The
-/// Esc-clears-filter arm claims Esc only while a filter is set, so an
+/// Esc-clears-filter binding claims Esc only while a filter is set, so an
 /// unfiltered board's Esc falls through. Modal character/backspace editing
 /// stays in [`handle`]; only the actions and the input/tags/filter submits
 /// are commands.
-pub(super) fn map_tasks_command(app: &App, key: &KeyEvent, on_tasks: bool) -> Option<Command> {
+pub(super) fn map_tasks_command(app: &App, key: &KeyEvent) -> Option<Command> {
     use TasksCommand as T;
-    let cmd = match (&app.view, key.code) {
-        (View::Grid, KeyCode::Down | KeyCode::Char('j')) if on_tasks => T::NavDown,
-        (View::Grid, KeyCode::Up | KeyCode::Char('k')) if on_tasks => T::NavUp,
-        (View::Grid, KeyCode::Right | KeyCode::Char('l')) if on_tasks => T::NavRight,
-        (View::Grid, KeyCode::Left | KeyCode::Char('h')) if on_tasks => T::NavLeft,
-        (View::Grid, KeyCode::Char('L')) if on_tasks => T::MoveTaskRight,
-        (View::Grid, KeyCode::Char('H')) if on_tasks => T::MoveTaskLeft,
-        (View::Grid, KeyCode::Char('a') | KeyCode::Char('n')) if on_tasks => T::OpenAddInput,
-        (View::Grid, KeyCode::Char('/')) if on_tasks => T::OpenFilter,
-        (View::Grid, KeyCode::Esc) if on_tasks && !app.tasks.filter.is_empty() => T::ClearFilter,
-        (View::Grid, KeyCode::Char('u')) if on_tasks => T::UndoDelete,
-        (View::Grid, KeyCode::Char(' ')) if on_tasks => T::SpaceAction,
-        (View::Grid, KeyCode::Char('s')) if on_tasks => T::OpenAssignPicker,
-        (View::Grid, KeyCode::Char('S')) if on_tasks => T::AssignAtHome,
-        (View::Grid, KeyCode::Char('r')) if on_tasks => T::OpenRename,
-        (View::Grid, KeyCode::Char('t')) if on_tasks => T::OpenTags,
-        (View::Grid, KeyCode::Char('T')) if on_tasks => T::OpenKindPicker,
-        (View::Grid, KeyCode::Char(c @ ('1' | '2' | '3' | '4'))) if on_tasks => {
-            use hal_lib::tasks::store::TaskPriority;
-            let priority = match c {
-                '1' => TaskPriority::P1,
-                '2' => TaskPriority::P2,
-                '3' => TaskPriority::P3,
-                _ => TaskPriority::P4,
-            };
-            T::SetPriority(priority)
-        }
-        (View::Grid, KeyCode::Char('x')) if on_tasks => T::DeleteSelected,
-        (View::Grid, KeyCode::Char('c')) if on_tasks => T::ClearDone,
-        (View::Grid, KeyCode::Char('f') | KeyCode::Enter) if on_tasks => T::FocusAgent,
-        (View::Grid, KeyCode::Char('v')) if on_tasks => T::OpenTaskInfo,
-        (View::Grid, KeyCode::Char('A')) if on_tasks => T::OpenAttachInput { from_info: false },
-        (View::TaskInfo, KeyCode::Char('a')) => T::OpenAttachInput { from_info: true },
-        (View::TaskInfo, KeyCode::Char('x')) => T::RemoveAttachment,
-        (View::TaskInput, KeyCode::Enter) => T::SubmitInput,
-        (View::TaskTags, KeyCode::Enter) => T::SubmitTags,
-        (View::TaskAttachInput, KeyCode::Enter) => T::SubmitAttach,
-        (View::TaskFilter, KeyCode::Enter) => T::ApplyFilter,
+    let maps = app.keys.maps();
+    let enter = key.code == KeyCode::Enter;
+    let cmd = match app.view {
+        View::Grid if app.current_tab == Tab::Tasks => match keymap::resolve(maps.board, key)? {
+            BoardKey::Do(T::ClearFilter) if app.tasks.filter.is_empty() => return None,
+            BoardKey::Do(cmd) => cmd,
+            // Reads the clipboard: a bin arm, see `handle`.
+            BoardKey::PasteNote => return None,
+        },
+        View::TaskInfo => match keymap::resolve(maps.task_info, key)? {
+            TaskInfoKey::Attach => T::OpenAttachInput { from_info: true },
+            TaskInfoKey::Remove => T::RemoveAttachment,
+            _ => return None,
+        },
+        View::TaskInput if enter => T::SubmitInput,
+        View::TaskTags if enter => T::SubmitTags,
+        View::TaskAttachInput if enter => T::SubmitAttach,
+        View::TaskFilter if enter => T::ApplyFilter,
         _ => return None,
     };
     Some(Command::Tasks(cmd))
@@ -57,6 +40,60 @@ pub(super) fn map_tasks_command(app: &App, key: &KeyEvent, on_tasks: bool) -> Op
 /// runs only after `map_tasks_command` returns `None`. Returns true when it
 /// consumed the key.
 pub(super) fn handle(app: &mut App, key: KeyEvent) -> bool {
+    let maps = app.keys.maps();
+    match app.view {
+        View::Grid if app.current_tab == Tab::Tasks => {
+            // `p`/Ctrl+V: attach the clipboard's text as a note. The
+            // clipboard read stays bin-side like the copy arm below, so App
+            // (and its tests) never touch the real clipboard.
+            if keymap::resolve(maps.board, &key) != Some(BoardKey::PasteNote) {
+                return false;
+            }
+            paste_note(app);
+            true
+        }
+        View::TaskInfo => match keymap::resolve(maps.task_info, &key) {
+            Some(action) => {
+                task_info(app, action);
+                true
+            }
+            None => false,
+        },
+        _ => edit_buffer(app, key),
+    }
+}
+
+/// Task Info popup: nav + per-attachment actions. Attach and remove are
+/// commands (see `map_tasks_command`); copy/open stay here because they
+/// need the clipboard / OS opener.
+fn task_info(app: &mut App, action: TaskInfoKey) {
+    match action {
+        TaskInfoKey::Close => app.close_task_info(),
+        TaskInfoKey::Next => app.task_info_next(),
+        TaskInfoKey::Prev => app.task_info_prev(),
+        TaskInfoKey::PageDown => app.task_info_scroll_by(10),
+        TaskInfoKey::PageUp => app.task_info_scroll_by(-10),
+        TaskInfoKey::CopyPath => match app.selected_task_attachment().map(|a| a.path.clone()) {
+            None => app.set_status("no attachment to copy".into()),
+            Some(path) => match hal_lib::clipboard::copy(&path) {
+                Ok(()) => app.set_status(format!("copied: {}", path)),
+                Err(e) => app.set_status(format!("copy failed: {}", e)),
+            },
+        },
+        TaskInfoKey::Open => match app.selected_task_attachment().map(|a| a.path.clone()) {
+            None => app.set_status("no attachment to open".into()),
+            Some(path) => match crate::effects::open_path_detached(&path) {
+                Ok(()) => app.set_status(format!("opening {}", path)),
+                Err(e) => app.set_status(format!("open failed: {}", e)),
+            },
+        },
+        TaskInfoKey::PasteNote => paste_note(app),
+        TaskInfoKey::Attach | TaskInfoKey::Remove => {}
+    }
+}
+
+/// Typing into the add/rename, tag, attach and filter buffers.
+fn edit_buffer(app: &mut App, key: KeyEvent) -> bool {
     match (&app.view, key.code) {
         (View::TaskInput, KeyCode::Esc) => app.close_task_input(),
         (View::TaskInput, KeyCode::Tab) => app.toggle_task_input_field(),
@@ -75,40 +112,6 @@ pub(super) fn handle(app: &mut App, key: KeyEvent) -> bool {
             app.tasks.input.pop();
         }
         (View::TaskAttachInput, KeyCode::Char(c)) => app.tasks.input.push(c),
-        // Task Info popup: nav + per-attachment actions. `a`/`x` are commands
-        // (see `map_tasks_command`); copy/open stay bin arms — they need the
-        // clipboard / OS opener.
-        (View::TaskInfo, KeyCode::Esc | KeyCode::Char('v') | KeyCode::Char('q')) => {
-            app.close_task_info();
-        }
-        (View::TaskInfo, KeyCode::Down | KeyCode::Char('j')) => app.task_info_next(),
-        (View::TaskInfo, KeyCode::Up | KeyCode::Char('k')) => app.task_info_prev(),
-        (View::TaskInfo, KeyCode::PageDown) => app.task_info_scroll_by(10),
-        (View::TaskInfo, KeyCode::PageUp) => app.task_info_scroll_by(-10),
-        (View::TaskInfo, KeyCode::Char('c')) => {
-            match app.selected_task_attachment().map(|a| a.path.clone()) {
-                None => app.set_status("no attachment to copy".into()),
-                Some(path) => match hal_lib::clipboard::copy(&path) {
-                    Ok(()) => app.set_status(format!("copied: {}", path)),
-                    Err(e) => app.set_status(format!("copy failed: {}", e)),
-                },
-            }
-        }
-        (View::TaskInfo, KeyCode::Char('o')) => {
-            match app.selected_task_attachment().map(|a| a.path.clone()) {
-                None => app.set_status("no attachment to open".into()),
-                Some(path) => match crate::effects::open_path_detached(&path) {
-                    Ok(()) => app.set_status(format!("opening {}", path)),
-                    Err(e) => app.set_status(format!("open failed: {}", e)),
-                },
-            }
-        }
-        // `p`: attach the clipboard's text as a note — from the popup or
-        // straight from a focused card. Clipboard read stays bin-side like
-        // the `c` copy arm, so App (and its tests) never touch the real
-        // clipboard.
-        (View::TaskInfo, KeyCode::Char('p')) => paste_note(app),
-        (View::Grid, KeyCode::Char('p')) if app.current_tab == Tab::Tasks => paste_note(app),
         (View::TaskFilter, KeyCode::Esc) => app.clear_task_filter(),
         (View::TaskFilter, KeyCode::Backspace) => app.task_filter_pop(),
         (View::TaskFilter, KeyCode::Char(c)) => app.task_filter_push(c),
@@ -134,32 +137,86 @@ mod tests {
     use super::*;
     use crate::keys::map_command;
     use hal_lib::app::GlobalCommand;
+    use hal_lib::keymap::Scheme;
 
-    fn press(app: &App, c: char) -> Option<Command> {
-        map_tasks_command(app, &KeyEvent::from(KeyCode::Char(c)), true)
+    fn press(app: &App, key: KeyCode) -> Option<Command> {
+        map_command(app, &KeyEvent::from(key))
     }
 
-    /// The board mapper runs before the global one, so every key it claims is
-    /// a key the rest of the hub loses on this tab. `J`/`K` cycle tabs
-    /// everywhere; the board must let them through.
+    fn on_board(scheme: Scheme) -> App {
+        let mut app = App::new();
+        app.keys = scheme;
+        app.current_tab = Tab::Tasks;
+        app
+    }
+
+    // The board's keys run ahead of the global ones; `J`/`K` cycle tabs
+    // everywhere and must come through.
     #[test]
-    fn the_board_leaves_the_tab_cycle_keys_alone() {
-        let app = App::new();
+    fn vim_board_keeps_the_tab_cycle_and_its_letters() {
+        let app = on_board(Scheme::Vim);
         for c in ['J', 'K'] {
-            assert!(
-                press(&app, c).is_none(),
-                "{} belongs to the tab cycle, not to the board",
-                c
-            );
             assert!(matches!(
-                map_command(&app, &KeyEvent::from(KeyCode::Char(c)), false, true, false),
+                press(&app, KeyCode::Char(c)),
                 Some(Command::Global(GlobalCommand::CycleTab { .. }))
             ));
         }
-        // The kind picker took `T`, which nothing else claims.
-        assert!(matches!(
-            press(&app, 'T'),
+        assert_eq!(
+            press(&app, KeyCode::Char('T')),
             Some(Command::Tasks(TasksCommand::OpenKindPicker))
+        );
+        assert_eq!(
+            press(&app, KeyCode::Char('j')),
+            Some(Command::Tasks(TasksCommand::NavDown))
+        );
+    }
+
+    #[test]
+    fn ide_board_moves_with_arrows_and_ignores_hjkl() {
+        let app = on_board(Scheme::Ide);
+        assert_eq!(
+            press(&app, KeyCode::Down),
+            Some(Command::Tasks(TasksCommand::NavDown))
+        );
+        assert_eq!(
+            map_command(&app, &KeyEvent::new(KeyCode::Right, KeyModifiers::SHIFT)),
+            Some(Command::Tasks(TasksCommand::MoveTaskRight))
+        );
+        assert_eq!(
+            map_command(
+                &app,
+                &KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL)
+            ),
+            Some(Command::Tasks(TasksCommand::OpenAddInput))
+        );
+        for c in ['h', 'j', 'k', 'l', 'J', 'K'] {
+            assert_eq!(press(&app, KeyCode::Char(c)), None, "{} is a Vim key", c);
+        }
+    }
+
+    // Esc belongs to the board only while there is a filter to clear.
+    #[test]
+    fn esc_clears_a_filter_and_is_otherwise_free() {
+        let mut app = on_board(Scheme::Ide);
+        assert_eq!(press(&app, KeyCode::Esc), None);
+        app.tasks.filter = "bug".into();
+        assert_eq!(
+            press(&app, KeyCode::Esc),
+            Some(Command::Tasks(TasksCommand::ClearFilter))
+        );
+    }
+
+    #[test]
+    fn stray_j_under_ide_is_told_where_vim_keys_went() {
+        let mut app = on_board(Scheme::Ide);
+        assert!(crate::keys::is_stray_vim_key(
+            &app,
+            &KeyEvent::from(KeyCode::Char('j'))
+        ));
+        app.keys = Scheme::Vim;
+        assert!(!crate::keys::is_stray_vim_key(
+            &app,
+            &KeyEvent::from(KeyCode::Char('j'))
         ));
     }
 }

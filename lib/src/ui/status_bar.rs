@@ -4,8 +4,10 @@
 use crate::app::{App, Tab, View};
 use crate::config;
 use crate::folder_picker::PickerMode;
+use crate::keymap;
 use crate::models;
 use crate::ui::agents;
+use crate::ui::hints::{self, Folders};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -14,6 +16,47 @@ use ratatui::Frame;
 use std::time::Duration;
 
 const ERROR_STATUS_TTL: Duration = Duration::from_secs(30);
+
+/// Hints for the views where printable keys are text, or the pane's: the
+/// same under every key scheme.
+fn typing_hints(app: &App) -> &'static str {
+    match app.view {
+        View::ConfirmClose => "y:confirm  n/esc:cancel",
+        View::ModelPicker
+            if app
+                .model_picker
+                .as_ref()
+                .is_some_and(|picker| picker.has_multiple_agents()) =>
+        {
+            "type:filter  ↑/↓:move  tab:agent  enter/space:start  esc:cancel"
+        }
+        View::ModelPicker => "type:filter  ↑/↓:move  enter/space:start  esc:cancel",
+        View::TaskLinkPicker => "type:filter  ↑/↓:move  enter/space:link  esc:cancel",
+        View::SessionFinder => "type:filter  ↑/↓:move  enter:open  esc:cancel",
+        View::RenameSession => "edit title  enter:rename  esc:cancel",
+        View::TmuxPane => "forwarding keys to tmux · F1: detach & close",
+        View::Dock => "typing into the session · F1: back to the list",
+        View::GhCreateInput => "type name  tab:toggle public/private  enter:create  esc:cancel",
+        View::TaskInput => {
+            if app.tasks.renaming.is_some() {
+                "edit task  enter:rename  esc:cancel"
+            } else {
+                "type task  tab:context  paste lands in context  enter:add  esc:cancel"
+            }
+        }
+        View::TaskTags => "edit tags  space/comma separates  enter:save  esc:cancel",
+        View::TaskAttachInput => {
+            if app.tasks.attach_note {
+                "type note  tab:file/URL  enter:attach  esc:cancel"
+            } else {
+                "paste path or URL  tab:note  enter:attach  esc:cancel"
+            }
+        }
+        View::TaskFilter => "type to filter (text or #tag)  enter:apply  esc:clear",
+        // Every other view prints its hints from the key scheme's tables.
+        _ => "",
+    }
+}
 
 pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
     let elapsed = app.last_refresh.elapsed().as_secs();
@@ -47,76 +90,43 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
             Style::default().fg(color).add_modifier(Modifier::BOLD),
         ));
     } else {
-        let keybinds: &str = match app.view {
-            View::Grid => match app.current_tab {
-                // High-value verbs lead so they survive the right-edge
-                // truncation at narrow widths (the status bar is one row, no
-                // wrap); rare verbs trail. The Space chip is rendered
-                // separately *ahead* of this string below so it is never the
-                // first thing clipped.
-                Tab::Tasks => "a/n:add  enter/f:focus agent  v:info  s:assign agent  S:agent in ~  h/l:col  j/k:task  H/L:move  /:filter  1-4:priority  t:tags  T:kind  r:rename  A:attach  p:paste note  x:delete  u:undo  c:clear done  ,:settings  tab:next  q:quit",
-                Tab::Sessions => "enter/f:type in/resume  /:find any  n:new  h:handoff  R:respawn  A:default agent  N:new+model  p:new in…  i:info  z:ack  r:rename  L:link task  o:shell  M:bookmarks  ←/j/k/l:nav  v:layout  x:close  H:inactive  ,:settings  tab:next  q:quit",
-                Tab::Metrics => "enter:view transcript  j/k:select  r:refresh  ,:settings  tab:next  q:quit",
+        let maps = app.keys.maps();
+        // A tab's own keys lead; the ones every tab shares trail.
+        let on_tab = |tab: String| format!("{}  {}", tab, keymap::hints(maps.global));
+        let keybinds: String = match app.view {
+            // Tables are in hint order: high-value verbs lead so they
+            // survive the right-edge truncation at narrow widths (the
+            // status bar is one row, no wrap). The Space chip is rendered
+            // separately *ahead* of this string below so it is never the
+            // first thing clipped.
+            View::Grid => on_tab(match app.current_tab {
+                Tab::Tasks => keymap::hints(maps.board),
+                Tab::Sessions => keymap::hints(maps.sessions),
+                Tab::Metrics => keymap::hints(maps.metrics),
                 Tab::Agents => agents::hints(app),
-            },
+            }),
             View::AgentDetail => agents::hints(app),
-            View::Popup => "j/k:scroll  esc:close  q:close",
-            View::LiveTail => "j/k:scroll  G:bottom  esc:close",
-            View::ConfirmClose => "y:confirm  n/esc:cancel",
+            View::Popup => keymap::hints(maps.popup),
+            View::LiveTail => keymap::hints(maps.live_tail),
             View::Settings if app.settings.editing.is_some() => {
-                "type a colour  enter:apply  esc:cancel"
+                "type a colour  enter:apply  esc:cancel".into()
             }
-            View::Settings => "j/k:move  h/l:change  enter:edit  d:default  esc:close",
-            View::ModelPicker if app
-                .model_picker
-                .as_ref()
-                .is_some_and(|picker| picker.has_multiple_agents()) =>
-            {
-                "type:filter  ↑/↓:move  tab:agent  enter/space:start  esc:cancel"
-            }
-            View::ModelPicker => "type:filter  ↑/↓:move  enter/space:start  esc:cancel",
-            View::AgentPicker => "j/k:move  enter/space:select default  esc:cancel",
-            View::RespawnPicker => "j/k:move  enter/space:respawn  esc:cancel",
-            View::TaskLinkPicker => "type:filter  ↑/↓:move  enter/space:link  esc:cancel",
-            View::SessionFinder => "type:filter  ↑/↓:move  enter:open  esc:cancel",
-            View::RenameSession => "edit title  enter:rename  esc:cancel",
-            View::TmuxPane => "forwarding keys to tmux · F1: detach & close",
-            View::Dock => "typing into the session · F1: back to the list",
+            View::Settings => keymap::hints(maps.settings),
+            View::AgentPicker => hints::list_picker(app.keys, "  ", "select default"),
+            View::RespawnPicker => hints::list_picker(app.keys, "  ", "respawn"),
+            View::TaskKindPicker => hints::list_picker(app.keys, "  ", "set kind"),
+            View::TaskInfo => keymap::hints(maps.task_info),
             View::FolderPicker => match app.folder_picker.as_ref().map(|p| p.mode) {
-                Some(PickerMode::Bookmarks) => {
-                    "j/k:move  enter/space:pick  m:unbookmark  esc:cancel"
-                }
+                Some(PickerMode::Bookmarks) => hints::folders(app.keys, "  ", Folders::Bookmarks),
                 Some(PickerMode::Places) => {
-                    "type:filter  ↑/↓:move  enter/space:pick  tab:browse folders  esc:cancel"
+                    "type:filter  ↑/↓:move  enter/space:pick  tab:browse folders  esc:cancel".into()
                 }
                 _ if app.tasks.pending_assign.is_some() => {
-                    "j/k:move  enter:descend  bksp:parent  space:pick  .:pick cwd  tab:places  esc:cancel"
+                    hints::folders(app.keys, "  ", Folders::Assigning)
                 }
-                _ => {
-                    "j/k:move  enter:descend  bksp:parent  space:pick  .:pick cwd  m:bookmark  c/C:gh new (pub/priv)  esc:cancel"
-                }
+                _ => hints::folders(app.keys, "  ", Folders::Browse),
             },
-            View::GhCreateInput => "type name  tab:toggle public/private  enter:create  esc:cancel",
-            View::TaskInput => {
-                if app.tasks.renaming.is_some() {
-                    "edit task  enter:rename  esc:cancel"
-                } else {
-                    "type task  tab:context  paste lands in context  enter:add  esc:cancel"
-                }
-            }
-            View::TaskTags => "edit tags  space/comma separates  enter:save  esc:cancel",
-            View::TaskKindPicker => "j/k:move  enter/space:set kind  esc:cancel",
-            View::TaskInfo => {
-                "j/k:attachment  a:attach  p:paste note  c:copy path  o:open  x:remove  PgUp/PgDn:scroll  esc/v:close"
-            }
-            View::TaskAttachInput => {
-                if app.tasks.attach_note {
-                    "type note  tab:file/URL  enter:attach  esc:cancel"
-                } else {
-                    "paste path or URL  tab:note  enter:attach  esc:cancel"
-                }
-            }
-            View::TaskFilter => "type to filter (text or #tag)  enter:apply  esc:clear",
+            _ => typing_hints(app).to_string(),
         };
         // Render the Space chip *first* so the single highest-value verb
         // (proceed/done on Tasks, hold on Sessions) is never the first thing

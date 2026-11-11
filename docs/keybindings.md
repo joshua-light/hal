@@ -1,7 +1,24 @@
 # Keybindings reference
 
-Every key hal binds, per tab and per popup. The status bar shows the
-common ones for the current view.
+Every key hal binds, per tab and per popup, in both key schemes. The status
+bar shows the common ones for the current view.
+
+## Key schemes
+
+| Scheme | In short |
+|---|---|
+| IDE (default) | Arrows move. `Ctrl+N` new, `Ctrl+T` find, `F2` rename, `Del` delete, `Ctrl+Z` undo. Other actions keep a letter. |
+| Vim | `hjkl` move, `J`/`K` switch tabs, `/` find, `x` delete, `u` undo. |
+
+Switch in the settings window (`,`, Key scheme), or set `[ui].keys = "vim"` in
+`~/.hal/config.toml`. Under IDE, `j` and `k` do nothing but say how to
+turn the Vim keys on.
+
+Keys a keyboard may lack have a second key under IDE: `Ins` for `Ctrl+N`,
+`Backspace` for `Del`, `r` for `F2` and `F5`, `e` for `F2` on an agent's
+setting. Where the Vim column is empty, the key is the same in both.
+
+Text inputs and type-to-filter popups take the same keys in both schemes.
 
 Keys are read by position, so they work with the Ukrainian or Russian
 layout switched on: `о` is `j`, `Л` is `K`, `б` is `,`. Text fields (names,
@@ -12,13 +29,15 @@ so `/` and `.` need the English layout.
 
 These work on every tab when no popup is open. `Ctrl+L` also works in popups.
 
-| Key | Action |
-|---|---|
-| `Tab` / `K` | Next tab |
-| `Shift+Tab` / `J` | Previous tab |
-| `q` | Quit |
-| `,` | Settings: layout, theme and colours |
-| `Ctrl+L` | Repaint the screen |
+| IDE | Vim | Action |
+|---|---|---|
+| `Tab` / `Ctrl+Tab` | `Tab` / `K` | Next tab |
+| `Shift+Tab` / `Ctrl+Shift+Tab` | `Shift+Tab` / `J` | Previous tab |
+| `q` / `Ctrl+Q` | `q` | Quit |
+| `,` | | Settings: keys, layout, theme and colours |
+| `Ctrl+L` | | Repaint the screen |
+
+`Ctrl+Tab` needs a terminal that speaks the kitty keyboard protocol.
 
 Tabs run Tasks → Sessions → Agents → Metrics; hal opens on Sessions.
 Agents shows once `~/.hal/agents/` exists, unless
@@ -26,53 +45,53 @@ Agents shows once `~/.hal/agents/` exists, unless
 
 ## Tasks
 
-| Key | Action |
-|---|---|
-| `h` `l` / `←` `→` | Previous or next column |
-| `j` `k` / `↓` `↑` | Next or previous card |
-| `H` / `L` | Move the card one column left or right. Skips Planning: `L` on a Planning card does not approve the plan (`Space` does); `H` from Done reopens into Review |
-| `a` / `n` | Add a task |
-| `r` | Rename the card |
-| `t` | Edit its tags |
-| `T` | Pick its kind (`[tasks].kinds`) |
-| `1`–`4` | Set priority P1–P4 |
-| `s` | Assign an agent: pick a folder, spawn a planning session there |
-| `S` | Assign an agent in your home folder |
-| `Enter` / `f` | Attach the card's agent; resume it if its session died |
-| `Space` | Planning card: approve the plan. Otherwise: toggle Done |
-| `v` | Task Info: prompt, notes and attachments |
-| `A` | Attach a file path or URL |
-| `p` | Attach the clipboard text as a note |
-| `/` | Filter cards by text or `#tag` |
-| `Esc` | Clear the filter |
-| `x` | Delete the card (archived); its agent session keeps running |
-| `c` | Clear the Done column (archived) |
-| `u` | Undo the last delete or clear |
+| IDE | Vim | Action |
+|---|---|---|
+| `←` `→` | `h` `l` / `←` `→` | Previous or next column |
+| `↑` `↓` | `k` `j` / `↑` `↓` | Previous or next card |
+| `Shift+←` / `Shift+→` | `H` / `L` | Move the card one column left or right. Skips Planning: moving a Planning card right does not approve the plan (`Space` does); moving left from Done reopens into Review |
+| `Ctrl+N` / `Ins` | `a` / `n` | Add a task |
+| `F2` / `r` | `r` | Rename the card |
+| `t` | | Edit its tags |
+| `T` | | Pick its kind (`[tasks].kinds`) |
+| `1`–`4` | | Set priority P1–P4 |
+| `s` | | Assign an agent: pick a folder, spawn a planning session there |
+| `S` | | Assign an agent in your home folder |
+| `Enter` | `Enter` / `f` | Attach the card's agent; resume it if its session died |
+| `Space` | | Planning card: approve the plan. Otherwise: toggle Done |
+| `v` | | Task Info: prompt, notes and attachments |
+| `A` | | Attach a file path or URL |
+| `Ctrl+V` / `p` | `p` | Attach the clipboard text as a note. Use `p` where the terminal keeps `Ctrl+V` for its own paste |
+| `Ctrl+F` / `/` | `/` | Filter cards by text or `#tag` |
+| `Esc` | | Clear the filter |
+| `Del` / `Backspace` | `x` | Delete the card (archived); its agent session keeps running |
+| `c` | | Clear the Done column (archived) |
+| `Ctrl+Z` | `u` | Undo the last delete or clear |
 
 ## Sessions
 
-| Key | Action |
-|---|---|
-| `j` `k` `l` / arrows | Move (`h` is handoff; `←` moves left) |
-| `Enter` / `f` | Type into the session's pane (docked in the split layout, a popup elsewhere), focus its window, or resume an inactive session |
-| `i` | Session info |
-| `v` | Cycle the layout: split (list beside the selected session's live pane), full-width list, card grid |
-| `H` | Show or hide inactive sessions |
-| `/` | Find any session on disk, however old, and reopen it |
-| `n` | New session with the default agent, in this session's folder |
-| `N` | Pick a model (and agent), then start a session in this folder |
-| `A` | Choose the default agent until restart |
-| `p` | Pick a folder, start a session there |
-| `M` | Pick a bookmarked folder, start a session there |
-| `h` | Mark the session for a handoff, or drop the mark: the next session you start opens with its last reply, named after it: `Plan` → `Plan (2)` → `Plan (3)` |
-| `R` | Continue the session on another subscription account |
-| `r` | Rename the session. The name a new session asks for at boot takes you into it on Enter |
-| `L` | Link the session to a task, or unlink it |
-| `t` | Terminal in this session's folder: a shell listed below the project's agents under its own icon. It asks for a name like a new session; Enter opens it |
-| `x` | End the session (asks first): kills its tmux session, else closes its window and terminates the agent |
-| `Space` | Put the session on hold, or release it. Held sessions move to the On hold section below every project, keep their real state, and stop counting toward attention; activity does not release them |
-| `z` | Acknowledge: mark the session idle until its next activity |
-| `m` | Go to Metrics |
+| IDE | Vim | Action |
+|---|---|---|
+| arrows | `j` `k` `l` / arrows | Move (`h` is handoff; `←` moves left) |
+| `Enter` | `Enter` / `f` | Type into the session's pane (docked in the split layout, a popup elsewhere), focus its window, or resume an inactive session |
+| `i` | | Session info |
+| `v` | | Cycle the layout: split (list beside the selected session's live pane), full-width list, card grid |
+| `H` | | Show or hide inactive sessions |
+| `Ctrl+T` / `/` | `/` | Find any session on disk, however old, and reopen it |
+| `Ctrl+N` / `Ins` | `n` | New session with the default agent, in this session's folder |
+| `N` | | Pick a model (and agent), then start a session in this folder |
+| `A` | | Choose the default agent until restart |
+| `p` | | Pick a folder, start a session there |
+| `M` | | Pick a bookmarked folder, start a session there |
+| `h` | | Mark the session for a handoff, or drop the mark: the next session you start opens with its last reply, named after it: `Plan` → `Plan (2)` → `Plan (3)` |
+| `R` | | Continue the session on another subscription account |
+| `F2` / `r` | `r` | Rename the session. The name a new session asks for at boot takes you into it on Enter |
+| `L` | | Link the session to a task, or unlink it |
+| `t` | | Terminal in this session's folder: a shell listed below the project's agents under its own icon. It asks for a name like a new session; Enter opens it |
+| `Del` / `Backspace` | `x` | End the session (asks first): kills its tmux session, else closes its window and terminates the agent |
+| `Space` | | Put the session on hold, or release it. Held sessions move to the On hold section below every project, keep their real state, and stop counting toward attention; activity does not release them |
+| `z` | | Acknowledge: mark the session idle until its next activity |
+| `m` | | Go to Metrics |
 
 `[agents.<id>].hotkey` adds a key that starts that agent in the selected
 session's folder. It overrides a built-in key it collides with.
@@ -82,35 +101,36 @@ session's folder. It overrides a built-in key it collides with.
 The agents run down the side; the selected one's page beside them leads
 with how it is doing.
 
-| Key | Action |
-|---|---|
-| `j` `k` / `↓` `↑` | Move |
-| `Enter` / `f` / `i` | Move the keyboard to the agent's page |
-| `Space` | Turn the agent off or on (on also clears a halt) |
-| `p` | Run now, the way the trigger would: a poll agent polls |
-| `n` | Interactive Claude session in the agent's folder |
+| IDE | Vim | Action |
+|---|---|---|
+| `↑` `↓` | `j` `k` / `↓` `↑` | Move |
+| `Enter` / `i` | `Enter` / `f` / `i` | Move the keyboard to the agent's page |
+| `Space` | | Turn the agent off or on (on also clears a halt) |
+| `p` | | Run now, the way the trigger would: a poll agent polls |
+| `Ctrl+N` / `Ins` | `n` | Interactive Claude session in the agent's folder |
 
 On the page:
 
-| Key | Action |
-|---|---|
-| `Tab` / `l` / `→` | Next section |
-| `Shift+Tab` / `h` / `←` | Previous section |
-| `1`–`4` | Runs, Artifacts, Log, Settings |
-| `j` `k` / `↓` `↑` | Move within the section |
-| `Enter` / `f` / `o` | Open the run's transcript or the artifact; change the setting |
-| `e` | Type a new value for the setting (`Enter` saves, `Esc` cancels) |
-| `Space`, `p`, `n` | As on the list |
-| `R` | Reset the agent's runs, spend and history (the workdir stays) |
-| `Esc` / `F1` / `q` | Back to the list |
+| IDE | Vim | Action |
+|---|---|---|
+| `Tab` / `→` | `Tab` / `l` / `→` | Next section |
+| `Shift+Tab` / `←` | `Shift+Tab` / `h` / `←` | Previous section |
+| `1`–`4` | | Runs, Artifacts, Log, Settings |
+| `↑` `↓` | `j` `k` / `↓` `↑` | Move within the section |
+| `Enter` / `o` | `Enter` / `f` / `o` | Open the run's transcript or the artifact; change the setting |
+| `F2` / `e` | `e` | Type a new value for the setting (`Enter` saves, `Esc` cancels) |
+| `Space`, `p` | | As on the list |
+| `Ctrl+N` / `Ins` | `n` | As on the list |
+| `R` | | Reset the agent's runs, spend and history (the workdir stays) |
+| `Esc` / `F1` / `q` | | Back to the list |
 
 ## Metrics
 
-| Key | Action |
-|---|---|
-| `j` `k` / `↓` `↑` | Select a session |
-| `Enter` | Open its transcript at its peak context |
-| `r` | Rerun the analysis |
+| IDE | Vim | Action |
+|---|---|---|
+| `↑` `↓` | `j` `k` / `↓` `↑` | Select a session |
+| `Enter` | | Open its transcript at its peak context |
+| `F5` / `r` | `r` | Rerun the analysis |
 
 ## Embedded pane
 
@@ -140,23 +160,23 @@ select text, drag with your terminal's bypass modifier held: usually
 
 `Esc` cancels every popup. Type-to-filter popups move with `↑`/`↓` or
 `Ctrl+J`/`Ctrl+K`/`Ctrl+N`/`Ctrl+P`, because letters go to the filter.
-List popups move with `j`/`k` or `↑`/`↓`.
+List popups move with `↑`/`↓`, and with `j`/`k` under Vim.
 
-| Popup | Keys |
-|---|---|
-| Session info | `j`/`k` scroll, `q` close |
-| Transcript tail | `j`/`k` scroll, `G` jump to the end, `q` close |
-| Close confirmation | `y` close, `n`/`q` cancel |
-| Model picker (`N`) | type to filter, `Tab` next agent, `Enter`/`Space` start |
-| Session finder (`/`) | type to filter, `Enter` open |
-| Task link picker (`L`) | type to filter, `Enter`/`Space` link |
-| Agent, respawn, kind pickers | `Enter`/`Space` choose |
-| Rename, tags | type, `Enter` save; tags split on space or comma |
-| Add task | type, `Tab` switch to the context box, `Enter` add |
-| Attach | type, `Tab` switch between file/URL and note, `Enter` attach |
-| Filter | type, `Enter` keep the filter, `Esc` clear it |
-| Settings (`,`) | `h`/`l` or `←`/`→` change, `Enter`/`Space` flip or type a colour, `d` back to the default, `q`/`,` close |
-| Task Info | `j`/`k` attachment, `a` attach, `p` paste note, `c` copy path, `o` open, `x` remove, `PgUp`/`PgDn` scroll, `v`/`q` close |
+| Popup | IDE | Vim |
+|---|---|---|
+| Session info | `↑`/`↓` scroll, `Esc`/`q` close | also `j`/`k` scroll |
+| Transcript tail | `↑`/`↓` scroll, `End` jump to the end, `Esc`/`q` close | `j`/`k` scroll, `G` jump to the end |
+| Close confirmation | `y` close, `n`/`q` cancel | |
+| Model picker (`N`) | type to filter, `Tab` next agent, `Enter`/`Space` start | |
+| Session finder | type to filter, `Enter` open | |
+| Task link picker (`L`) | type to filter, `Enter`/`Space` link | |
+| Agent, respawn, kind pickers | `↑`/`↓` move, `Enter`/`Space` choose | also `j`/`k` move |
+| Rename, tags | type, `Enter` save; tags split on space or comma | |
+| Add task | type, `Tab` switch to the context box, `Enter` add | |
+| Attach | type, `Tab` switch between file/URL and note, `Enter` attach | |
+| Filter | type, `Enter` keep the filter, `Esc` clear it | |
+| Task Info | `↑`/`↓` attachment, `a` attach, `Ctrl+V`/`p` paste note, `Ctrl+C`/`c` copy path, `Enter`/`o` open, `Del`/`Backspace` remove, `PgUp`/`PgDn` scroll, `Esc`/`v`/`q` close | `j`/`k` attachment, `p` paste note, `c` copy path, `o` open, `x` remove |
+| Settings (`,`) | `↑`/`↓` move, `←`/`→` change, `Enter`/`Space` flip or type a colour, `Del`/`Backspace`/`d` back to the default, `Esc`/`q`/`,` close | also `j`/`k` move, `h`/`l` change |
 
 ### Folder picker
 
@@ -165,7 +185,10 @@ The picker opens on a fuzzy list of places (bookmarks and recent folders), or in
 | Mode | Keys |
 |---|---|
 | Places | type to filter, `Enter`/`Space` pick, `Tab` browse folders |
-| Browse | `Enter`/`l`/`→` open folder, `Backspace`/`h`/`←` parent, `Space` pick, `.` pick the current folder, `m` bookmark, `c`/`C` create a public/private GitHub repo here, `Tab` places, `q` cancel |
-| Bookmarks (`M`) | `Enter`/`Space`/`.` pick, `m` remove bookmark, `q` cancel |
+| Browse | `Enter`/`→` open folder, `Backspace`/`←` parent, `Space` pick, `.` pick the current folder, `m` bookmark, `c`/`C` create a public/private GitHub repo here, `Tab` places, `Esc`/`q` cancel |
+| Bookmarks (`M`) | `Enter`/`Space`/`.` pick, `m` remove bookmark, `Esc`/`q` cancel |
+
+Browse and Bookmarks move with `↑`/`↓`. Vim adds `j`/`k` to move, `l` to
+open a folder and `h` for its parent.
 
 GitHub repo name: type, `Tab` toggle public/private, `Enter` create.

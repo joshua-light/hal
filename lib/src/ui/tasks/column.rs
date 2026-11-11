@@ -1,5 +1,7 @@
 use super::card::render_task_card;
+use crate::app::TasksCommand as T;
 use crate::app::{App, Targets};
+use crate::keymap::{self, BoardKey};
 use crate::models::SessionInfo;
 use crate::tasks::store::TaskStatus;
 use crate::ui::common::task_status_meta;
@@ -89,12 +91,19 @@ pub(super) fn render_task_column(
     frame.render_widget(block, area);
 
     if tasks.is_empty() {
+        let board = app.keys.maps().board;
+        let key = |cmd| keymap::key_for(board, BoardKey::Do(cmd));
         let empty_hint = match status {
-            TaskStatus::Backlog => "No tasks — press a to add one",
-            TaskStatus::Planning => "Nothing planning — s hands a task to an agent",
-            TaskStatus::Running => "Nothing running — Space approves a plan",
-            TaskStatus::Review => "No PR waiting on you",
-            TaskStatus::Done => "Nothing done yet",
+            TaskStatus::Backlog => {
+                format!("No tasks — press {} to add one", key(T::OpenAddInput))
+            }
+            TaskStatus::Planning => format!(
+                "Nothing planning — {} hands a task to an agent",
+                key(T::OpenAssignPicker)
+            ),
+            TaskStatus::Running => "Nothing running — Space approves a plan".into(),
+            TaskStatus::Review => "No PR waiting on you".into(),
+            TaskStatus::Done => "Nothing done yet".into(),
         };
         let hint = Paragraph::new(Line::from(Span::styled(
             empty_hint,

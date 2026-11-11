@@ -1,5 +1,6 @@
 use super::{ago, wrap_text};
 use crate::app::App;
+use crate::keymap::{self, Hint};
 use crate::tasks::store::Artifact;
 use crate::ui::artifacts::{
     classify_artifact, evidence_card_header, read_text_excerpt, truncated_footer, CardKind,
@@ -184,10 +185,8 @@ pub(crate) fn render_task_info(frame: &mut Frame, area: Rect, app: &mut App) {
     } else {
         format!("attachment {}/{}", sel + 1, n_attach)
     };
-    let hint = format!(
-        " {}   j/k:select   a:attach   p:paste note   c:copy path   o:open   x:remove   esc/v:close ",
-        pos
-    );
+    let keys = keymap::hints_with(app.keys.maps().task_info, "   ", |_| Hint::Keep);
+    let hint = format!(" {}   {} ", pos, keys);
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
             hint,

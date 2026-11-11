@@ -82,9 +82,9 @@ pub(super) async fn drain_input(
                     // Ctrl+L: classic manual full repaint, and a live
                     // diagnostic — if a "stuck" highlight snaps right
                     // after this, the physical screen had diverged from
-                    // ratatui's buffer. Intercepted here because `keys`
-                    // reads a bare Char('l') as move-right; inside the
-                    // pane it falls through to the shell.
+                    // ratatui's buffer. Intercepted here so it works in
+                    // every view, text inputs included; inside the pane
+                    // it falls through to the shell.
                     //
                     // Nothing in this arm uses an early `continue`: it
                     // would skip the poll(0) burst check below and block

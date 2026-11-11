@@ -1,18 +1,22 @@
 use crate::scan_msg::ScanMsg;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::KeyEvent;
 use hal_lib::app::App;
+use hal_lib::keymap::{self, MetricsKey};
 use hal_lib::{live_view, models, platform};
 use tokio::sync::mpsc;
 
 pub(super) fn handle(app: &mut App, key: KeyEvent, scan_tx: &mpsc::Sender<ScanMsg>) {
-    match key.code {
-        KeyCode::Down | KeyCode::Char('j') => {
+    let Some(key) = keymap::resolve(app.keys.maps().metrics, &key) else {
+        return;
+    };
+    match key {
+        MetricsKey::Down => {
             app.metrics_nav_down();
         }
-        KeyCode::Up | KeyCode::Char('k') => {
+        MetricsKey::Up => {
             app.metrics_nav_up();
         }
-        KeyCode::Enter => {
+        MetricsKey::Open => {
             if let Some(row) = app.selected_metrics_session().cloned() {
                 let agent_kind = if platform::paths::pi_sessions_dir()
                     .as_ref()
@@ -38,10 +42,9 @@ pub(super) fn handle(app: &mut App, key: KeyEvent, scan_tx: &mpsc::Sender<ScanMs
                 }
             }
         }
-        KeyCode::Char('r') => {
+        MetricsKey::Refresh => {
             app.metrics.analysis = None;
             crate::workers::spawn_metrics(scan_tx.clone());
         }
-        _ => {}
     }
 }

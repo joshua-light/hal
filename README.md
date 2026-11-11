@@ -95,7 +95,7 @@ when an account runs out, set up the resource broker
 ## Platform notes
 
 - **Windows** has no window focus; psmux ignores the
-  `list-clients -F` format hal would need. Use the embedded pane (`f` on a
+  `list-clients -F` format hal would need. Use the embedded pane (`Enter` on a
   session or terminal) instead of an external window. psmux also takes
   no command in `new-session`, so hal types `hal-new` into the new
   pane.
@@ -112,7 +112,8 @@ when an account runs out, set up the resource broker
 
 - [How hal works](docs/guide.md): the task board lifecycle, deep links,
   persistent agents and account moves.
-- [Keybindings](docs/keybindings.md): every key, per tab and popup.
+- [Keybindings](docs/keybindings.md): every key, per tab and popup, in
+  both schemes: IDE (the default) and Vim.
 - [Configuration](docs/configuration.md): every `~/.hal/config.toml` key
   and its default.
 - [CLI reference](docs/cli-reference.md): output contracts and the `agent`

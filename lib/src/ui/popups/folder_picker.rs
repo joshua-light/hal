@@ -5,6 +5,7 @@ use super::widgets::{highlight_spans, render_filter_row, RowStyles};
 use crate::app::App;
 use crate::folder_picker::{FolderPicker, PickerMode, PlaceSource};
 use crate::ui::common::{centered_fixed, popup_block, CURSOR};
+use crate::ui::hints::{self, Folders};
 use crate::ui::palette::{accent_fg, DIM_TEXT};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -26,25 +27,26 @@ pub(crate) fn render_folder_picker(frame: &mut Frame, area: Rect, app: &App) {
     let popup = centered_fixed(area, 80, 24);
     frame.render_widget(Clear, popup);
 
-    let (title_text, footer_text, empty_text) = if bookmarks_mode {
+    let (title_text, mode, empty_text) = if bookmarks_mode {
         (
             " New session · bookmarks ",
-            " j/k:move · enter/space:pick · m:unbookmark · esc:cancel ",
-            "  (no bookmarks — press N to browse, then m on a folder)",
+            Folders::Bookmarks,
+            "  (no bookmarks — bookmark a folder while browsing for one)",
         )
     } else if assigning {
         (
             " Assign task · pick folder ",
-            " enter:descend · bksp:parent · space/.:pick · tab:places · esc:cancel ",
+            Folders::Assigning,
             "  (no subdirectories)",
         )
     } else {
         (
             " New session · pick folder ",
-            " enter:descend · bksp:parent · space:pick · .:pick cwd · m:bookmark · c/C:gh new · esc:cancel ",
+            Folders::Browse,
             "  (no subdirectories)",
         )
     };
+    let footer_text = format!(" {} ", hints::folders(app.keys, " · ", mode));
 
     let block = popup_block(Span::styled(
         title_text,

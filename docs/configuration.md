@@ -3,9 +3,10 @@
 hal reads `~/.hal/config.toml` once, at startup. The file is optional.
 Every key has a default, so list only what you change.
 
-The settings window (`,` on any tab) edits the `[ui]` layout keys and
-`[theme]` in place: each change rewrites the file, keeping its comments, and
-shows at once. It refuses to write while the file does not load.
+The settings window (`,` on any tab) edits the key scheme, the `[ui]`
+layout keys and `[theme]` in place: each change rewrites the file, keeping
+its comments, and shows at once. It refuses to write while the file does not
+load.
 
 Unknown keys are rejected. A read or parse error, including one unknown key,
 makes hal ignore the whole file and use the defaults. The only signal is a
@@ -108,6 +109,7 @@ Sessions with no live process.
 | `cell_height` | `6` | Session card height, in rows. At 5 or less the card merges branch, model and id into one row. |
 | `cell_width` | `42` | Minimum session card width; the grid fits `terminal width / cell_width` columns. |
 | `show_planning_column` | `false` | Show the Planning column on the Tasks board. Hidden, its cards show under In Progress. |
+| `keys` | `"ide"` | The key scheme: `"ide"` (arrows, `Ctrl+N`, `F2`, `Del`) or `"vim"` (`hjkl` and single letters). See [keybindings.md](keybindings.md). |
 | `dim_unfocused` | `false` | Dim the side without the keyboard on the list-and-page tabs (Sessions' split layout, Builds, Agents). Off, the page's white frame or the list's brighter cursor row marks where typing goes. |
 | `sessions_layout` | `"split"` | The Sessions layout hal opens on: `split`, `list` or `grid`. `v` still cycles it. |
 

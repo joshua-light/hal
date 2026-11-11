@@ -1,7 +1,8 @@
-//! Plain j/k list pickers: default agent, respawn account, task kind.
+//! Plain list pickers: default agent, respawn account, task kind.
 
 use crate::app::App;
 use crate::ui::common::{centered_fixed, popup_block};
+use crate::ui::hints;
 use crate::ui::palette::DIM_TEXT;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -28,7 +29,7 @@ pub(crate) fn render_agent_picker(frame: &mut Frame, area: Rect, app: &App) {
             .add_modifier(Modifier::BOLD),
     ))
     .title_bottom(Span::styled(
-        " j/k:move · enter/space:select · esc:cancel ",
+        format!(" {} ", hints::list_picker(app.keys, " · ", "select")),
         Style::default().fg(DIM_TEXT),
     ));
     let inner = block.inner(popup);
@@ -95,7 +96,7 @@ pub(crate) fn render_respawn_picker(frame: &mut Frame, area: Rect, app: &App) {
             .add_modifier(Modifier::BOLD),
     ))
     .title_bottom(Span::styled(
-        " j/k:move · enter/space:respawn · esc:cancel ",
+        format!(" {} ", hints::list_picker(app.keys, " · ", "respawn")),
         Style::default().fg(DIM_TEXT),
     ));
     let inner = block.inner(popup);
@@ -169,7 +170,7 @@ pub(crate) fn render_task_kind_picker(frame: &mut Frame, area: Rect, app: &App) 
             .add_modifier(Modifier::BOLD),
     ))
     .title_bottom(Span::styled(
-        " j/k:move · enter/space:select · esc:cancel ",
+        format!(" {} ", hints::list_picker(app.keys, " · ", "select")),
         Style::default().fg(DIM_TEXT),
     ));
     let inner = block.inner(popup);

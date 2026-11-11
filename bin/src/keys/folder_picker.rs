@@ -7,13 +7,13 @@ use crate::scan_msg::ScanMsg;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use hal_lib::app::App;
 use hal_lib::folder_picker::PickerMode;
+use hal_lib::keymap::{self, FolderKey};
 use hal_lib::spawn;
 use tokio::sync::mpsc;
 
 pub(super) fn handle(app: &mut App, key: KeyEvent) {
     // Places mode (task assign): printable keys type into the fuzzy
-    // filter, so the generic picker bindings below (j/k/q/m/. etc.)
-    // must not fire. Navigation is arrows plus ctrl-j/k and ctrl-n/p.
+    // filter, so the scheme's picker bindings below must not fire. Navigation is arrows plus ctrl-j/k and ctrl-n/p.
     if app
         .folder_picker
         .as_ref()
@@ -66,48 +66,45 @@ pub(super) fn handle(app: &mut App, key: KeyEvent) {
         }
         return;
     }
-    match key.code {
-        KeyCode::Esc | KeyCode::Char('q') => {
-            app.close_folder_picker();
-        }
+    let Some(key) = keymap::resolve(app.keys.maps().folders, &key) else {
+        return;
+    };
+    match key {
+        FolderKey::Cancel => app.close_folder_picker(),
         // Browse → back to the places list.
-        KeyCode::Tab => {
-            app.toggle_places_picker_mode();
-        }
-        KeyCode::Down | KeyCode::Char('j') => {
+        FolderKey::Places => app.toggle_places_picker_mode(),
+        FolderKey::Down => {
             if let Some(p) = app.folder_picker.as_mut() {
                 p.move_down();
             }
         }
-        KeyCode::Up | KeyCode::Char('k') => {
+        FolderKey::Up => {
             if let Some(p) = app.folder_picker.as_mut() {
                 p.move_up();
             }
         }
-        KeyCode::Char('m') => match app.toggle_selected_bookmark() {
+        FolderKey::Bookmark => match app.toggle_selected_bookmark() {
             Some((true, path)) => app.set_status(format!("bookmarked {}", path)),
             Some((false, path)) => app.set_status(format!("unbookmarked {}", path)),
             None => app.set_status("no folder selected".into()),
         },
-        KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => {
+        FolderKey::Open => {
             if in_bookmarks(app) {
                 pick_from_folder_picker(app);
             } else if let Some(p) = app.folder_picker.as_mut() {
                 p.descend();
             }
         }
-        KeyCode::Backspace | KeyCode::Left | KeyCode::Char('h') => {
+        FolderKey::Parent => {
             if let Some(p) = app.folder_picker.as_mut() {
                 p.ascend();
             }
         }
-        KeyCode::Char(' ') => {
-            pick_from_folder_picker(app);
-        }
-        KeyCode::Char('.') => {
+        FolderKey::Pick => pick_from_folder_picker(app),
+        FolderKey::PickCwd => {
             // Bookmarks mode has no meaningful "current dir" —
             // the entries are absolute paths from disk — so
-            // collapse `.` into the same action as space/Enter.
+            // collapse it into the same action as Pick.
             if in_bookmarks(app) {
                 pick_from_folder_picker(app);
             } else {
@@ -122,12 +119,11 @@ pub(super) fn handle(app: &mut App, key: KeyEvent) {
                 }
             }
         }
-        KeyCode::Char(c @ ('c' | 'C')) => {
+        FolderKey::GhPublic | FolderKey::GhPrivate => {
             if !in_bookmarks(app) {
-                app.enter_gh_create_input(c == 'C');
+                app.enter_gh_create_input(key == FolderKey::GhPrivate);
             }
         }
-        _ => {}
     }
 }
 

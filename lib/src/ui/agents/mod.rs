@@ -13,6 +13,7 @@
 
 use crate::app::{App, Section, View};
 use crate::harness::{AgentSnapshot, AgentStatus};
+use crate::keymap::{self, Hint};
 use crate::ui::common::Dot;
 use ratatui::style::Style;
 use ratatui::text::Span;
@@ -53,21 +54,32 @@ fn dot(agent: &AgentSnapshot) -> Dot {
     }
 }
 
-/// Key hints for the Agents list and the page.
-pub(crate) fn hints(app: &App) -> &'static str {
+/// Key hints for the Agents list and the page. The page's keys are the
+/// same in every section; what they act on, and so which are worth a hint,
+/// is not.
+pub(crate) fn hints(app: &App) -> String {
+    use crate::app::HarnessCommand as H;
+    let maps = app.keys.maps();
     if app.view != View::AgentDetail {
-        return "f/enter:page  space:on/off  p:run now  n:claude here  j/k:agent  ,:settings  tab:next  q:quit";
+        return keymap::hints(maps.agents);
     }
     let d = &app.harness.detail;
     if d.editing.is_some() {
-        return "type a value  enter:save  esc:cancel";
+        return "type a value  enter:save  esc:cancel".into();
     }
-    match d.section {
-        Section::Runs => "f/enter:transcript  j/k:run  h/l:section  space:on/off  p:run now  n:claude here  R:reset  esc/F1:list",
-        Section::Artifacts => "f/enter:open  j/k:select  h/l:section  space:on/off  p:run now  n:claude here  esc/F1:list",
-        Section::Log => "j/k:scroll  h/l:section  space:on/off  p:run now  n:claude here  esc/F1:list",
-        Section::Settings => "enter:change  e:type value  j/k:field  h/l:section  space:on/off  n:claude here  esc/F1:list",
-    }
+    let section = d.section;
+    keymap::hints_with(maps.agent_page, "  ", |cmd| match (cmd, section) {
+        (H::Activate, Section::Runs) => Hint::As("transcript"),
+        (H::Activate, Section::Log) => Hint::Skip,
+        (H::Activate, Section::Settings) => Hint::As("change"),
+        (H::EditSetting, s) if s != Section::Settings => Hint::Skip,
+        (H::DetailDown, Section::Runs) => Hint::As("run"),
+        (H::DetailDown, Section::Log) => Hint::As("scroll"),
+        (H::DetailDown, Section::Settings) => Hint::As("field"),
+        (H::RunNow, Section::Settings) => Hint::Skip,
+        (H::Reset, s) if s != Section::Runs => Hint::Skip,
+        _ => Hint::Keep,
+    })
 }
 
 #[cfg(test)]

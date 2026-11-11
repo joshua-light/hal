@@ -1,5 +1,6 @@
 //! The remaining `config.toml` sections: one struct per `[section]`.
 
+use crate::keymap::Scheme;
 use serde::de::IgnoredAny;
 use serde::Deserialize;
 use std::time::Duration;
@@ -169,6 +170,9 @@ pub struct UiConfig {
     pub dim_unfocused: bool,
     /// The layout the Sessions tab opens on; `v` still cycles it.
     pub sessions_layout: StartLayout,
+    /// Which keys the hub answers to: `"ide"` (arrows and editor chords) or
+    /// `"vim"`.
+    pub keys: Scheme,
     /// Retired with the Projects layer; accepted and ignored (see
     /// [`Config`](super::Config)'s `_backlog`).
     #[serde(rename = "show_projects_tab")]
@@ -221,6 +225,7 @@ impl Default for UiConfig {
             show_planning_column: false,
             dim_unfocused: false,
             sessions_layout: StartLayout::default(),
+            keys: Scheme::default(),
         }
     }
 }

@@ -34,7 +34,8 @@ the TUI see each other's changes.
    Each worker reports through a `ScanMsg`.
 3. Each loop pass draws with `ui::render`, then `input::drain_input` waits
    5 ms (16 ms while the embedded pane shows) and handles the input burst.
-4. `keys::handle_key` maps a key to a lib `Command` (`keys::map_command`).
+4. `keys::handle_key` maps a key to a lib `Command` (`keys::map_command`),
+   looking it up in the tables of the key scheme in force (`keymap`).
    `App::execute` applies it and returns `Effect`s that need bin-side
    machinery (a pane, a channel, the window manager), which
    `effects::apply_effect` runs. Keys no command covers go to the view's own
@@ -70,7 +71,10 @@ the TUI see each other's changes.
   multiplexer session.
 - `platform/`: OS shims: `mux` (tmux or psmux), `process`, `window`,
   `paths`, `terminal`.
-- `config/`: `config.toml`, loaded once through `config::get`.
+- `config/`: `config.toml`, read through `config::get`; `config::update`
+  rewrites it for the settings window.
+- `keymap/`: the key schemes. One table per place that takes keys, per
+  scheme; key dispatch and every hint line read the same rows.
 - `title/`: background session titles.
 - `tmux_pane/`: the embedded pane (portable-pty, vt100, tui-term).
 
@@ -107,10 +111,12 @@ cover the runtime.
 
 - **A key.** Add a variant to the tab's enum in `lib/src/app/command/<tab>.rs`
   and handle it in `App::execute`; return an `Effect` for anything needing
-  the terminal or window manager. Map the key in `bin/src/keys/<tab>.rs`,
-  update the hint in `ui/status_bar.rs` and
-  [keybindings.md](keybindings.md). Pin it with a command test inside
+  the terminal or window manager. Bind it in both schemes' tables
+  (`lib/src/keymap/ide.rs`, `vim.rs`); the row's label is its status-bar
+  hint. Update [keybindings.md](keybindings.md). Pin it with a command test inside
   `with_temp_home`: building an `App` touches the task store.
+- **A row in the settings window.** Add it to `settings_lines` in
+  `app/settings.rs`, and its value to `Setting::value`.
 - **A view or popup.** Add a `View` variant in `app/view.rs`, draw it under
   `ui/` (overlays in `ui/popups/`), and handle its keys in `bin/src/keys/`.
 - **A CLI verb.** Put the logic in `lib/src/ops/`, add a
