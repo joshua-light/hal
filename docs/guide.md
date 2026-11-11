@@ -140,7 +140,7 @@ Commands and the folder layout: `hal help agent` and
 
 `h` on the Sessions tab marks a session (light-blue border or gutter) and
 takes its last reply. The next session you start — `Ctrl+N`, `N`, an agent
-hotkey, `p`, `M` — opens with that reply typed into its input as
+hotkey, `Ctrl+P`, `M` — opens with that reply typed into its input as
 `<context>…</context>`, unsent. Add what to do with it and press Enter: a
 fresh session that continues where the old one stopped, without compacting.
 `h` on the marked session drops the mark.

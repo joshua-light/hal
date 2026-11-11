@@ -6,7 +6,7 @@
 //! - `error`: [`CliError`] and the JSON error contract.
 //! - `flags`: the shared `--flag` parser and the help-request scan.
 //! - `board`, `link` (`open`), `agent`, `build`, `resource`, `usage`,
-//!   `wake`: one file per verb.
+//!   `wake`, `keys`: one file per verb.
 //! - `help`: `--help` text.
 
 mod agent;
@@ -14,6 +14,7 @@ mod board;
 mod error;
 mod flags;
 mod help;
+mod keys;
 mod link;
 mod resource;
 mod usage;
@@ -37,6 +38,7 @@ pub fn dispatch(args: &[String]) -> Option<i32> {
         "agent" => Some(handle(agent::agent_subcommand(rest))),
         "board" => Some(handle(board::board_subcommand(rest))),
         "usage" => Some(handle(usage::usage(rest))),
+        "keys" => Some(handle(keys::keys(rest))),
         "wake" => Some(handle(wake::wake(rest))),
         _ => None,
     }

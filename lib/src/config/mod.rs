@@ -42,6 +42,8 @@ pub struct Config {
     pub metrics: MetricsConfig,
     pub harness: HarnessConfig,
     pub theme: ThemeConfig,
+    /// The user's own keys, laid over the scheme `[ui].keys` picks.
+    pub keymap: crate::keymap::Overrides,
     /// Retired with the Projects layer. Accepted and ignored so an old
     /// config keeps loading: `deny_unknown_fields` would otherwise fail the
     /// parse and drop every other setting back to defaults.

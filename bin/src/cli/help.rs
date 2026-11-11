@@ -10,6 +10,7 @@ pub(crate) fn print_cli_help(topic: &[String]) -> Result<(), CliError> {
         Some("board") => print!("{}", BOARD_HELP),
         Some("resource") => print!("{}", RESOURCE_HELP),
         Some("usage") => print!("{}", USAGE_HELP),
+        Some("keys") => print!("{}", KEYS_HELP),
         Some(other) => {
             return Err(CliError::Usage(format!(
                 "unknown help topic: {} (try `hal help`)",
@@ -26,6 +27,7 @@ Usage:
   hal                         Start the TUI
   hal --no-tui                Print discovered sessions
   hal help [topic]            Show CLI help
+  hal keys [ide|vim]          List every key and the name to rebind it by
 
 Desktop-facing topics:
   open              Act on a hal:// deep link (a PR review or fix, a board task)
@@ -42,6 +44,24 @@ Tasks board:
 Examples:
   hal board add --text "Fix the flaky test" --priority p1
   hal open "hal://task?id=tk-123&dir=$PWD"
+"#;
+
+const KEYS_HELP: &str = r#"hal keys [ide|vim]
+
+Print every place that takes keys, the actions in it and the keys each has
+now, as TOML. The scheme defaults to [ui].keys; [keymap] overrides from
+~/.hal/config.toml are applied, and its mistakes are listed on stderr.
+
+To rebind an action, copy its line and header into config.toml and change
+the keys:
+
+  [keymap.sessions]
+  new_in = ["ctrl+p", "o"]
+  shell = []                  # no key
+
+Keys: a character (P is Shift+P), enter, esc, tab, space, bksp, del, ins,
+up, down, left, right, pgup, pgdn, home, end, f1-f12, with ctrl+, alt+ or
+shift+ in front. cmd+ means ctrl+. Restart hal to load the change.
 "#;
 
 const USAGE_HELP: &str = r#"hal usage [--home DIR] [--refresh]

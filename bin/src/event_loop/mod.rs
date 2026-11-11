@@ -31,6 +31,15 @@ pub(crate) async fn run(terminal: &mut Term, frame_bytes: Arc<AtomicU64>) -> io:
     // never touch the real home, so App::new() constructs in-memory ones.
     app.sessions.acks = hal_lib::acks::Acks::load();
     app.sessions.holds = hal_lib::holds::Holds::load();
+    // A mistyped `[keymap]` entry is skipped, which would otherwise look
+    // like the rebind silently not working.
+    if let [first, rest @ ..] = hal_lib::keymap::problems() {
+        let more = match rest.len() {
+            0 => String::new(),
+            n => format!(" (+{} more: hal keys)", n),
+        };
+        app.set_error(format!("config.toml [keymap] {}{}", first, more));
+    }
 
     let titles = Titles::new(config::get().title.concurrency);
 

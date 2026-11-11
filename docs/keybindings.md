@@ -7,7 +7,7 @@ bar shows the common ones for the current view.
 
 | Scheme | In short |
 |---|---|
-| IDE (default) | Arrows move. `Ctrl+N` new, `Ctrl+T` find, `F2` rename, `Del` delete, `Ctrl+Z` undo. Other actions keep a letter. |
+| IDE (default) | Arrows move. `Ctrl+N` new, `Ctrl+T` find, `Ctrl+P` open a folder, `F2` rename, `Del` delete, `Ctrl+Z` undo. Other actions keep a letter. |
 | Vim | `hjkl` move, `J`/`K` switch tabs, `/` find, `x` delete, `u` undo. |
 
 Switch in the settings window (`,`, Key scheme), or set `[ui].keys = "vim"` in
@@ -20,10 +20,59 @@ setting. Where the Vim column is empty, the key is the same in both.
 
 Text inputs and type-to-filter popups take the same keys in both schemes.
 
+`Cmd` counts as `Ctrl` where the terminal forwards it: `Cmd+P` is `Ctrl+P`.
+
 Keys are read by position, so they work with the Ukrainian or Russian
 layout switched on: `о` is `j`, `Л` is `K`, `б` is `,`. Text fields (names,
 filters, the pane) keep the letters you type. Punctuation is read as typed,
 so `/` and `.` need the English layout.
+
+## Rebinding keys
+
+Any key in the tables below can change. Add a `[keymap.<place>]` table to
+`~/.hal/config.toml`, naming the action and its new keys, then restart hal:
+
+```toml
+[keymap.sessions]
+new_in = ["ctrl+p", "o"]   # two keys
+close = "x"                # one key
+shell = []                 # no key
+
+[keymap.global]
+quit = "ctrl+q"
+```
+
+`hal keys` prints every place, action and current key in this form, so
+copy the line you want and edit it. `hal keys vim` shows the other scheme.
+
+| Place | Where its keys work |
+|---|---|
+| `global` | Every tab |
+| `sessions`, `board`, `agents`, `metrics` | The Sessions, Tasks, Agents and Metrics tabs |
+| `task_info`, `agent_page` | The task info popup; an agent's page |
+| `settings` | The settings window |
+| `popup`, `live_tail` | Session info; the transcript |
+| `list_picker` | The agent, respawn and task-kind pickers |
+| `folders` | The folder picker |
+
+Rules:
+
+- An override replaces all keys of its action, under whichever scheme is on.
+- Your key wins: any other action in that place that had it loses it. A
+  `global` key is also taken from the four tabs.
+- Hints in the status bar and popup footers show the new keys.
+- A key is a character (`P` is `Shift+P`) or one of `enter`, `esc`, `tab`,
+  `space`, `bksp`, `del`, `ins`, `up`, `down`, `left`, `right`, `pgup`,
+  `pgdn`, `home`, `end`, `f1`–`f12`, with `ctrl+`, `alt+` or `shift+` in
+  front. `cmd+` means `ctrl+`.
+- Outside the kitty keyboard protocol a terminal cannot send
+  `Ctrl+Shift+letter`, and sends `Ctrl+I`, `Ctrl+M` and `Ctrl+H` as `Tab`,
+  `Enter` and `Backspace`.
+- A mistyped place, action or key is skipped and named in the status bar at
+  startup; `hal keys` lists them all.
+
+Not rebindable: text inputs, type-to-filter popups, the embedded pane,
+`Ctrl+L` and agent hotkeys (`[agents.<id>].hotkey`).
 
 ## Global
 
@@ -81,7 +130,7 @@ Agents shows once `~/.hal/agents/` exists, unless
 | `Ctrl+N` / `Ins` | `n` | New session with the default agent, in this session's folder |
 | `N` | | Pick a model (and agent), then start a session in this folder |
 | `A` | | Choose the default agent until restart |
-| `p` | | Pick a folder, start a session there |
+| `Ctrl+P` | `p` | Pick a folder, start a session there |
 | `M` | | Pick a bookmarked folder, start a session there |
 | `h` | | Mark the session for a handoff, or drop the mark: the next session you start opens with its last reply, named after it: `Plan` → `Plan (2)` → `Plan (3)` |
 | `R` | | Continue the session on another subscription account |

@@ -171,6 +171,27 @@ Persistent agents (the Agents tab).
 | `show_tab` | `true` | Show the Agents tab. It also stays hidden until `~/.hal/agents/` exists. |
 | `refresh_secs` | `3` | How often the TUI rereads agent state (minimum 1). |
 
+## `[keymap.<place>]`
+
+Your own keys, laid over the scheme `[ui].keys` picks. Each key of the table
+is an action, each value its key or list of keys:
+
+```toml
+[keymap.sessions]
+new_in = "ctrl+p"
+close = ["del", "x"]
+shell = []            # no key
+```
+
+`hal keys` prints every place and action with its current keys in this
+form. [keybindings.md](keybindings.md#rebinding-keys) covers the key names
+and the rules.
+
+Unlike the rest of the file, a mistake here costs only its own entry: an
+unknown place, action or key is skipped, shown in the status bar at startup
+and listed by `hal keys`. A value that is neither a string nor a list of
+strings still fails the whole file.
+
 ## Retired keys
 
 These keys belonged to the removed Projects layer and Builds tab. hal still

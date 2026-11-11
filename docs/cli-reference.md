@@ -6,7 +6,7 @@ full. The other verbs document themselves: `hal help <verb>`.
 ## Conventions
 
 - A verb prints one JSON object on one line of stdout, with `"ok": true` on
-  success. The exceptions print plain text: `help`, `--no-tui`,
+  success. The exceptions print plain text: `help`, `--no-tui`, `keys`,
   `agent list` without `--json`, and `board notes` without `--json`.
 - A failure prints `{"ok": false, "error": "…", "kind": "…"}` on stdout,
   plus `"recipe"` when the error suggests a fix, and a human line on stderr.
@@ -28,6 +28,7 @@ full. The other verbs document themselves: `hal help <verb>`.
 | `agent` | Scaffold, run and inspect persistent agents | below |
 | `resource` | Accounts, task sessions and shared resources | `hal help resource`, [resource-management.md](resource-management.md) |
 | `usage` | Quota of a Claude account | `hal help usage` |
+| `keys` | `hal keys [ide\|vim]`: every action and its keys, as the TOML that rebinds them | `hal help keys`, [keybindings.md](keybindings.md#rebinding-keys) |
 | `wake` | `hal wake <name>`: agents watching `<name>` poll now. Prints `{"ok": true, "wake": "<name>"}` | none |
 
 ## agent

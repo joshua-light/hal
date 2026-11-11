@@ -85,7 +85,7 @@ fn is_stray_vim_key(app: &App, key: &KeyEvent) -> bool {
         && matches!(key.code, KeyCode::Char('j' | 'k'))
         && !key
             .modifiers
-            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER)
 }
 
 /// Keys no command covers: the Tasks modal editors, then the view's own

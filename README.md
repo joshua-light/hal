@@ -113,7 +113,7 @@ when an account runs out, set up the resource broker
 - [How hal works](docs/guide.md): the task board lifecycle, deep links,
   persistent agents and account moves.
 - [Keybindings](docs/keybindings.md): every key, per tab and popup, in
-  both schemes: IDE (the default) and Vim.
+  both schemes: IDE (the default) and Vim, and how to rebind them.
 - [Configuration](docs/configuration.md): every `~/.hal/config.toml` key
   and its default.
 - [CLI reference](docs/cli-reference.md): output contracts and the `agent`

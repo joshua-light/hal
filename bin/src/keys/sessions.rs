@@ -20,12 +20,12 @@ pub(super) fn map_sessions_command(app: &App, key: &KeyEvent) -> Option<Command>
 /// `[agents.<id>].hotkey` bindings on the Sessions grid. Checked before the
 /// scheme's table so a user who binds `N` to Claude gets Claude, not the
 /// model picker — the config doc says custom hotkeys shadow built-ins.
-/// Ctrl/Alt chords are left alone; Shift is what makes an uppercase char.
+/// Ctrl/Alt/Cmd chords are left alone; Shift is what makes an uppercase char.
 fn map_agent_hotkey(key: &KeyEvent) -> Option<Command> {
     use hal_lib::app::SessionsCommand as S;
     if key
         .modifiers
-        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER)
     {
         return None;
     }

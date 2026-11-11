@@ -9,16 +9,22 @@
 //! - `ide`: arrows and the usual editor chords. The default.
 //! - `vim`: `hjkl` and single letters.
 //! - `layout`: Cyrillic letters read as the key they sit on.
+//! - `names`: what each action is called in `config.toml`.
+//! - `custom`: `[keymap]`, the user's keys laid over a scheme.
 
 use crate::app::{Command, GlobalCommand, HarnessCommand, TasksCommand};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::Deserialize;
 
+mod custom;
 mod ide;
 mod layout;
+mod names;
 mod vim;
 
+pub use custom::{dump, problems, KeyList, Overrides};
 pub use layout::{latin, to_latin};
+pub use names::Action;
 
 /// Which set of keys the hub answers to: `[ui].keys`, changed in the
 /// settings window.
@@ -41,7 +47,14 @@ impl Scheme {
         }
     }
 
+    /// The tables in force: this scheme with the config's `[keymap]`
+    /// applied.
     pub fn maps(self) -> &'static Keymaps {
+        custom::maps(self)
+    }
+
+    /// The tables as shipped.
+    pub fn defaults(self) -> &'static Keymaps {
         match self {
             Scheme::Ide => &ide::MAPS,
             Scheme::Vim => &vim::MAPS,
@@ -104,14 +117,18 @@ impl Key {
     /// Whether `ev` is this key.
     ///
     /// Ctrl and Alt must match exactly, so `t` and `Ctrl+T` are different
-    /// keys. Super is ignored: a terminal that forwards Cmd lands `⌘p` on
-    /// `p`. Shift is ignored on printable keys, whose character already
+    /// keys. Super counts as Ctrl: a terminal that forwards Cmd lands `⌘P`
+    /// on `Ctrl+P`, the chord a Mac user reaches for. Shift is ignored on printable keys, whose character already
     /// says it, and on BackTab, which is Shift+Tab by definition. A Ctrl
     /// chord ignores letter case: only the kitty protocol tells `Ctrl+T`
     /// from `Ctrl+Shift+T`.
     pub fn matches(&self, ev: &KeyEvent) -> bool {
         let chord = KeyModifiers::CONTROL | KeyModifiers::ALT;
-        if ev.modifiers & chord != self.mods & chord {
+        let mut pressed = ev.modifiers;
+        if pressed.contains(KeyModifiers::SUPER) {
+            pressed |= KeyModifiers::CONTROL;
+        }
+        if pressed & chord != self.mods & chord {
             return false;
         }
         match (self.code, ev.code) {
@@ -149,6 +166,7 @@ impl Key {
             KeyCode::Right => "→".into(),
             KeyCode::PageUp => "PgUp".into(),
             KeyCode::PageDown => "PgDn".into(),
+            KeyCode::Home => "home".into(),
             KeyCode::End => "end".into(),
             KeyCode::F(n) => format!("F{}", n),
             other => format!("{:?}", other).to_lowercase(),
@@ -166,18 +184,99 @@ impl Key {
         out + &name
     }
 
-    #[cfg(test)]
     fn event(&self) -> KeyEvent {
         KeyEvent::new(self.code, self.mods)
+    }
+
+    /// Whether one press would answer to both keys.
+    pub(crate) fn same_press(&self, other: &Key) -> bool {
+        self.matches(&other.event()) || other.matches(&self.event())
+    }
+
+    /// A key as `[keymap]` spells it: what [`Key::label`] prints, in any
+    /// case, plus the long names (`backspace`, `up`, `cmd+p`). A lone
+    /// character is itself, so `P` is Shift+P.
+    pub fn parse(text: &str) -> Result<Key, String> {
+        let trimmed = text.trim();
+        // `+` is both the separator and a key.
+        let (mods_text, name) = match trimmed.strip_suffix('+') {
+            Some(rest) if rest.is_empty() || rest.ends_with('+') => {
+                (rest.strip_suffix('+').unwrap_or(""), "+")
+            }
+            _ => trimmed.rsplit_once('+').unwrap_or(("", trimmed)),
+        };
+        let mut mods = NONE;
+        for word in mods_text.split('+').filter(|w| !w.is_empty()) {
+            mods |= match word.trim().to_lowercase().as_str() {
+                "ctrl" | "control" | "cmd" | "command" | "super" => KeyModifiers::CONTROL,
+                "alt" | "opt" | "option" => KeyModifiers::ALT,
+                "shift" => KeyModifiers::SHIFT,
+                other => return Err(format!("{}: no such modifier: {}", text, other)),
+            };
+        }
+        let mut code = match name.trim().to_lowercase().as_str() {
+            "enter" | "return" => KeyCode::Enter,
+            "esc" | "escape" => KeyCode::Esc,
+            "tab" => KeyCode::Tab,
+            "backtab" => KeyCode::BackTab,
+            "space" => KeyCode::Char(' '),
+            "bksp" | "backspace" => KeyCode::Backspace,
+            "del" | "delete" => KeyCode::Delete,
+            "ins" | "insert" => KeyCode::Insert,
+            "up" | "↑" => KeyCode::Up,
+            "down" | "↓" => KeyCode::Down,
+            "left" | "←" => KeyCode::Left,
+            "right" | "→" => KeyCode::Right,
+            "pgup" | "pageup" => KeyCode::PageUp,
+            "pgdn" | "pagedown" => KeyCode::PageDown,
+            "home" => KeyCode::Home,
+            "end" => KeyCode::End,
+            lower => {
+                let mut chars = name.trim().chars();
+                let f_key = lower.strip_prefix('f').and_then(|n| n.parse::<u8>().ok());
+                match (chars.next(), chars.next(), f_key) {
+                    (Some(c), None, _) => KeyCode::Char(c),
+                    (_, _, Some(n @ 1..=12)) => KeyCode::F(n),
+                    _ => return Err(format!("{}: no such key: {}", text, name.trim())),
+                }
+            }
+        };
+        // Shift is part of what these keys are, not a modifier on them.
+        if mods.contains(KeyModifiers::SHIFT) {
+            match code {
+                KeyCode::Tab | KeyCode::BackTab => code = KeyCode::BackTab,
+                KeyCode::Char(c) if c.is_alphabetic() => {
+                    code = KeyCode::Char(c.to_uppercase().next().unwrap_or(c));
+                }
+                KeyCode::Char(' ') => {}
+                KeyCode::Char(c) => {
+                    return Err(format!(
+                        "{}: write the character Shift+{} types instead",
+                        text, c
+                    ));
+                }
+                _ => {}
+            }
+            if matches!(code, KeyCode::BackTab | KeyCode::Char(_)) {
+                mods -= KeyModifiers::SHIFT;
+            }
+        }
+        // A Ctrl chord has no case; lowercase is how hints print it.
+        if let (true, KeyCode::Char(c)) = (mods.contains(KeyModifiers::CONTROL), code) {
+            code = KeyCode::Char(c.to_lowercase().next().unwrap_or(c));
+        }
+        Ok(Key { code, mods })
     }
 }
 
 /// How a binding shows in a hint line.
 #[derive(Clone, Copy, Debug)]
 pub enum Bar {
-    /// Not shown: the second half of a pair, or a key the line has no room
-    /// for.
+    /// Not shown: a key the line has no room for.
     Hide,
+    /// Not shown on its own: the hint of the nearest shown row above names
+    /// this binding's key too (`j/k:task`).
+    Join,
     /// Every key of the binding, then the label: `a/n:add`.
     Label(&'static str),
     /// The keys spelled by hand, then the label: a pair of bindings under
@@ -196,8 +295,12 @@ pub struct Binding<A: 'static> {
 pub type Keymap<A> = &'static [Binding<A>];
 
 /// `bind!(action, [keys], "label")` shows every key; `"keys" => "label"`
-/// spells the keys by hand; no label hides the binding from hint lines.
+/// spells the keys by hand; no label hides the binding from hint lines;
+/// `join` hides it under the hand-spelled hint above.
 macro_rules! bind {
+    ($action:expr, [$($key:expr),+ $(,)?], join) => {
+        $crate::keymap::Binding { keys: &[$($key),+], action: $action, bar: $crate::keymap::Bar::Join }
+    };
     ($action:expr, [$($key:expr),+ $(,)?]) => {
         $crate::keymap::Binding { keys: &[$($key),+], action: $action, bar: $crate::keymap::Bar::Hide }
     };
@@ -243,8 +346,12 @@ pub fn hints<A: Copy>(map: Keymap<A>) -> String {
 pub fn hints_with<A: Copy>(map: Keymap<A>, sep: &str, relabel: impl Fn(A) -> Hint) -> String {
     let mut parts: Vec<String> = Vec::new();
     for b in map {
+        // An override can leave a binding with no key: nothing to hint.
+        if b.keys.is_empty() {
+            continue;
+        }
         let (keys, label) = match b.bar {
-            Bar::Hide => continue,
+            Bar::Hide | Bar::Join => continue,
             Bar::Label(label) => (key_names(b.keys), label),
             Bar::Text(keys, label) => (keys.to_string(), label),
         };
@@ -351,6 +458,8 @@ pub enum SettingsKey {
 }
 
 /// One scheme's tables.
+///
+/// [`PLACES`] lists the fields by name: the `<place>` of `[keymap.<place>]`.
 pub struct Keymaps {
     /// Every tab, after the tab's own table.
     pub global: Keymap<GlobalCommand>,
@@ -367,10 +476,97 @@ pub struct Keymaps {
     pub folders: Keymap<FolderKey>,
 }
 
+pub(crate) const PLACES: [&str; 12] = [
+    "global",
+    "sessions",
+    "board",
+    "task_info",
+    "agents",
+    "agent_page",
+    "metrics",
+    "settings",
+    "popup",
+    "live_tail",
+    "list_picker",
+    "folders",
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::app::SessionsCommand;
+
+    fn names_of<A: Action>(map: Keymap<A>) -> Vec<&'static str> {
+        map.iter().map(|b| b.action.name()).collect()
+    }
+
+    // `[keymap]` finds a binding by its name, so each needs one of its own.
+    #[test]
+    fn every_binding_has_a_name_of_its_own_in_its_place() {
+        for scheme in Scheme::ALL {
+            let m = scheme.defaults();
+            let places = [
+                names_of(m.global),
+                names_of(m.sessions),
+                names_of(m.board),
+                names_of(m.task_info),
+                names_of(m.agents),
+                names_of(m.agent_page),
+                names_of(m.metrics),
+                names_of(m.settings),
+                names_of(m.popup),
+                names_of(m.live_tail),
+                names_of(m.list_picker),
+                names_of(m.folders),
+            ];
+            for (place, names) in PLACES.iter().zip(places) {
+                for (i, name) in names.iter().enumerate() {
+                    assert!(
+                        !name.is_empty(),
+                        "{:?} {}: row {} has no name",
+                        scheme,
+                        place,
+                        i
+                    );
+                    assert!(
+                        !names[..i].contains(name),
+                        "{:?} {}: {} names two rows",
+                        scheme,
+                        place,
+                        name
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_key_parses_back_from_its_label() {
+        for scheme in Scheme::ALL {
+            let m = scheme.defaults();
+            let keys = [keys_of(m.global), keys_of(m.sessions), keys_of(m.board)];
+            for key in keys.iter().flatten().flat_map(|ks| ks.iter()) {
+                assert_eq!(Key::parse(&key.label()), Ok(*key), "{}", key.label());
+            }
+        }
+    }
+
+    #[test]
+    fn keys_parse_as_written() {
+        assert_eq!(Key::parse("Ctrl+P"), Ok(ctrl(ch('p'))));
+        assert_eq!(Key::parse("cmd+p"), Ok(ctrl(ch('p'))));
+        assert_eq!(Key::parse("shift+p"), Ok(ch('P')));
+        assert_eq!(Key::parse("P"), Ok(ch('P')));
+        assert_eq!(Key::parse("shift+left"), Ok(shift(LEFT)));
+        assert_eq!(Key::parse("Backspace"), Ok(BKSP));
+        assert_eq!(Key::parse("f5"), Ok(F5));
+        assert_eq!(Key::parse("f"), Ok(ch('f')));
+        assert_eq!(Key::parse("+"), Ok(ch('+')));
+        assert_eq!(Key::parse("ctrl++"), Ok(ctrl(ch('+'))));
+        assert!(Key::parse("f13").is_err());
+        assert!(Key::parse("shift+1").is_err());
+        assert!(Key::parse("").is_err());
+    }
 
     fn press(c: char) -> KeyEvent {
         KeyEvent::from(KeyCode::Char(c))
@@ -410,7 +606,7 @@ mod tests {
     #[test]
     fn no_key_is_bound_twice_in_one_place() {
         for scheme in Scheme::ALL {
-            let m = scheme.maps();
+            let m = scheme.defaults();
             let with_global = |mut keys: Vec<&'static [Key]>| {
                 keys.extend(keys_of(m.global));
                 keys
@@ -458,13 +654,22 @@ mod tests {
         assert!(!LEFT.matches(&shifted));
         assert!(ch('K').matches(&KeyEvent::new(KeyCode::Char('K'), KeyModifiers::SHIFT)));
         assert!(BACKTAB.matches(&KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT)));
-        // Cmd+p is p.
-        assert!(ch('p').matches(&KeyEvent::new(KeyCode::Char('p'), KeyModifiers::SUPER)));
+    }
+
+    #[test]
+    fn cmd_is_ctrl() {
+        let cmd_p = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::SUPER);
+        assert!(ctrl(ch('p')).matches(&cmd_p));
+        assert!(!ch('p').matches(&cmd_p));
+        assert_eq!(
+            resolve(Scheme::Ide.defaults().sessions, &cmd_p),
+            Some(Command::Sessions(SessionsCommand::OpenPlacesPicker))
+        );
     }
 
     #[test]
     fn vim_keeps_its_letters() {
-        let m = Scheme::Vim.maps();
+        let m = Scheme::Vim.defaults();
         assert_eq!(
             resolve(m.sessions, &press('j')),
             Some(Command::Sessions(SessionsCommand::NavDown))
@@ -483,7 +688,7 @@ mod tests {
     // Vim keys went; that only works while no IDE tab binds them.
     #[test]
     fn ide_moves_with_arrows_and_leaves_j_and_k_free() {
-        let m = Scheme::Ide.maps();
+        let m = Scheme::Ide.defaults();
         assert_eq!(
             resolve(m.sessions, &KeyEvent::from(KeyCode::Down)),
             Some(Command::Sessions(SessionsCommand::NavDown))
@@ -505,9 +710,9 @@ mod tests {
 
     #[test]
     fn hints_follow_the_table() {
-        let line = hints(Scheme::Vim.maps().metrics);
+        let line = hints(Scheme::Vim.defaults().metrics);
         assert_eq!(line, "enter:view transcript  j/k:select  r:refresh");
-        let relabelled = hints_with(Scheme::Vim.maps().list_picker, " · ", |k| match k {
+        let relabelled = hints_with(Scheme::Vim.defaults().list_picker, " · ", |k| match k {
             ListKey::Confirm => Hint::As("respawn"),
             ListKey::Cancel => Hint::Skip,
             _ => Hint::Keep,
@@ -518,7 +723,7 @@ mod tests {
     #[test]
     fn key_for_names_the_first_key() {
         let add = BoardKey::Do(TasksCommand::OpenAddInput);
-        assert_eq!(key_for(Scheme::Vim.maps().board, add), "a");
-        assert_eq!(key_for(Scheme::Ide.maps().board, add), "ctrl+n");
+        assert_eq!(key_for(Scheme::Vim.defaults().board, add), "a");
+        assert_eq!(key_for(Scheme::Ide.defaults().board, add), "ctrl+n");
     }
 }

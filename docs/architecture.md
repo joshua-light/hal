@@ -74,7 +74,8 @@ the TUI see each other's changes.
 - `config/`: `config.toml`, read through `config::get`; `config::update`
   rewrites it for the settings window.
 - `keymap/`: the key schemes. One table per place that takes keys, per
-  scheme; key dispatch and every hint line read the same rows.
+  scheme; key dispatch and every hint line read the same rows. `[keymap]`
+  in `config.toml` lays the user's keys over them (`custom.rs`).
 - `title/`: background session titles.
 - `tmux_pane/`: the embedded pane (portable-pty, vt100, tui-term).
 
@@ -113,7 +114,7 @@ cover the runtime.
   and handle it in `App::execute`; return an `Effect` for anything needing
   the terminal or window manager. Bind it in both schemes' tables
   (`lib/src/keymap/ide.rs`, `vim.rs`); the row's label is its status-bar
-  hint. Update [keybindings.md](keybindings.md). Pin it with a command test inside
+  hint. Name it in `names.rs`, which is how `[keymap]` finds it. Update [keybindings.md](keybindings.md). Pin it with a command test inside
   `with_temp_home`: building an `App` touches the task store.
 - **A row in the settings window.** Add it to `settings_lines` in
   `app/settings.rs`, and its value to `Setting::value`.
