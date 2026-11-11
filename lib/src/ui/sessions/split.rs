@@ -228,9 +228,13 @@ fn render_dock(frame: &mut Frame, split: Split, app: &mut App) {
     };
     let mut block = split.page_block(title);
     let live = app.sessions.dock.pane().is_some();
+    let maps = app.keys.maps();
     let hint = match (focused, live) {
-        (true, _) => Some(" F1 back to the list "),
-        (false, true) => Some(" Enter type here "),
+        (true, _) => Some(format!(
+            " {} back to the list ",
+            crate::keymap::key_for(maps.pane, crate::keymap::PaneKey::Release)
+        )),
+        (false, true) => Some(format!(" {} type here ", focus_key(app))),
         (false, false) => None,
     };
     if let Some(hint) = hint {
@@ -247,7 +251,7 @@ fn render_dock(frame: &mut Frame, split: Split, app: &mut App) {
     app.render.dock_size = (inner.height, inner.width);
 
     let Some(pane) = app.sessions.dock.pane_mut() else {
-        let words = placeholder(session.as_ref(), &app.sessions.dock);
+        let words = placeholder(session.as_ref(), &app.sessions.dock, &focus_key(app));
         render_placeholder(frame, inner, &words);
         return;
     };
@@ -283,17 +287,29 @@ fn dock_title(session: &SessionInfo, marks: CardMarks, now: u64) -> Line<'static
 }
 
 /// Why the dock has no pane, and what Enter does about it.
-fn placeholder(session: Option<&SessionInfo>, dock: &Dock) -> [String; 2] {
+/// The key that gives the selected session the keyboard, capitalised to
+/// open a sentence.
+fn focus_key(app: &App) -> String {
+    let focus = crate::app::Command::Sessions(crate::app::SessionsCommand::FocusSelected);
+    let key = crate::keymap::key_for(app.keys.maps().sessions, focus);
+    let mut chars = key.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => key,
+    }
+}
+
+fn placeholder(session: Option<&SessionInfo>, dock: &Dock, focus: &str) -> [String; 2] {
     let Some(session) = session else {
         return ["No session selected.".into(), String::new()];
     };
     if session.state == SessionState::Inactive {
-        return ["Not running.".into(), "Enter resumes it.".into()];
+        return ["Not running.".into(), format!("{} resumes it.", focus)];
     }
     if session.tmux_session.is_none() {
         return [
             "Running in its own terminal window, outside tmux.".into(),
-            "Enter brings that window forward.".into(),
+            format!("{} brings that window forward.", focus),
         ];
     }
     match dock.failure() {

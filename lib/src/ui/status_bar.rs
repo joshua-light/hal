@@ -17,44 +17,66 @@ use std::time::Duration;
 
 const ERROR_STATUS_TTL: Duration = Duration::from_secs(30);
 
-/// Hints for the views where printable keys are text, or the pane's: the
-/// same under every key scheme.
-fn typing_hints(app: &App) -> &'static str {
+/// Hints for the views where printable keys are text, or the pane's.
+fn typing_hints(app: &App) -> String {
+    use crate::keymap::PaneKey;
+    let keys = app.keys;
+    let maps = keys.maps();
+    let text = |what: &str, submit, cancel, switch| {
+        format!(
+            "{}  {}",
+            what,
+            hints::text(keys, "  ", submit, cancel, switch)
+        )
+    };
+    let release = keymap::key_for(maps.pane, PaneKey::Release);
     match app.view {
-        View::ConfirmClose => "y:confirm  n/esc:cancel",
+        View::ConfirmClose => keymap::hints(maps.confirm_close),
         View::ModelPicker
             if app
                 .model_picker
                 .as_ref()
                 .is_some_and(|picker| picker.has_multiple_agents()) =>
         {
-            "type:filter  ↑/↓:move  tab:agent  enter/space:start  esc:cancel"
+            hints::filter(keys, "  ", "start", Some("agent"))
         }
-        View::ModelPicker => "type:filter  ↑/↓:move  enter/space:start  esc:cancel",
-        View::TaskLinkPicker => "type:filter  ↑/↓:move  enter/space:link  esc:cancel",
-        View::SessionFinder => "type:filter  ↑/↓:move  enter:open  esc:cancel",
-        View::RenameSession => "edit title  enter:rename  esc:cancel",
-        View::TmuxPane => "forwarding keys to tmux · F1: detach & close",
-        View::Dock => "typing into the session · F1: back to the list",
-        View::GhCreateInput => "type name  tab:toggle public/private  enter:create  esc:cancel",
+        View::ModelPicker => hints::filter(keys, "  ", "start", None),
+        View::TaskLinkPicker => hints::filter(keys, "  ", "link", None),
+        View::SessionFinder => {
+            format!("type:filter  {}", keymap::hints(maps.session_finder))
+        }
+        View::RenameSession => text("edit title", "rename", "cancel", None),
+        View::TmuxPane => format!("forwarding keys to tmux · {}: detach & close", release),
+        View::Dock => format!("typing into the session · {}: back to the list", release),
+        View::GhCreateInput => text(
+            "type name",
+            "create",
+            "cancel",
+            Some("toggle public/private"),
+        ),
         View::TaskInput => {
             if app.tasks.renaming.is_some() {
-                "edit task  enter:rename  esc:cancel"
+                text("edit task", "rename", "cancel", None)
             } else {
-                "type task  tab:context  paste lands in context  enter:add  esc:cancel"
+                text(
+                    "type task (paste lands in context)",
+                    "add",
+                    "cancel",
+                    Some("context"),
+                )
             }
         }
-        View::TaskTags => "edit tags  space/comma separates  enter:save  esc:cancel",
+        View::TaskTags => text("edit tags  space/comma separates", "save", "cancel", None),
         View::TaskAttachInput => {
             if app.tasks.attach_note {
-                "type note  tab:file/URL  enter:attach  esc:cancel"
+                text("type note", "attach", "cancel", Some("file/URL"))
             } else {
-                "paste path or URL  tab:note  enter:attach  esc:cancel"
+                text("paste path or URL", "attach", "cancel", Some("note"))
             }
         }
-        View::TaskFilter => "type to filter (text or #tag)  enter:apply  esc:clear",
-        // Every other view prints its hints from the key scheme's tables.
-        _ => "",
+        View::TaskFilter => text("type to filter (text or #tag)", "apply", "clear", None),
+        // Every other view prints its hints from its own table.
+        _ => String::new(),
     }
 }
 
@@ -108,9 +130,10 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
             View::AgentDetail => agents::hints(app),
             View::Popup => keymap::hints(maps.popup),
             View::LiveTail => keymap::hints(maps.live_tail),
-            View::Settings if app.settings.editing.is_some() => {
-                "type a colour  enter:apply  esc:cancel".into()
-            }
+            View::Settings if app.settings.editing.is_some() => format!(
+                "type a colour  {}",
+                hints::text(app.keys, "  ", "apply", "cancel", None)
+            ),
             View::Settings => keymap::hints(maps.settings),
             View::AgentPicker => hints::list_picker(app.keys, "  ", "select default"),
             View::RespawnPicker => hints::list_picker(app.keys, "  ", "respawn"),
@@ -119,14 +142,14 @@ pub(super) fn render_status_bar(frame: &mut Frame, area: Rect, app: &App) {
             View::FolderPicker => match app.folder_picker.as_ref().map(|p| p.mode) {
                 Some(PickerMode::Bookmarks) => hints::folders(app.keys, "  ", Folders::Bookmarks),
                 Some(PickerMode::Places) => {
-                    "type:filter  ↑/↓:move  enter/space:pick  tab:browse folders  esc:cancel".into()
+                    hints::filter(app.keys, "  ", "pick", Some("browse folders"))
                 }
                 _ if app.tasks.pending_assign.is_some() => {
                     hints::folders(app.keys, "  ", Folders::Assigning)
                 }
                 _ => hints::folders(app.keys, "  ", Folders::Browse),
             },
-            _ => typing_hints(app).to_string(),
+            _ => typing_hints(app),
         };
         // Render the Space chip *first* so the single highest-value verb
         // (proceed/done on Tasks, hold on Sessions) is never the first thing

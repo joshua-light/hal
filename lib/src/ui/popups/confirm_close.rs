@@ -28,7 +28,12 @@ pub(crate) fn render_confirm_close(frame: &mut Frame, area: Rect, app: &App) {
     ))
     .border_style(Style::default().fg(action_color))
     .title_bottom(Span::styled(
-        " [Y]es · [N]o · Esc cancel ",
+        format!(
+            " {} ",
+            crate::keymap::hints_with(app.keys.maps().confirm_close, " · ", |_| {
+                crate::keymap::Hint::Keep
+            })
+        ),
         Style::default().fg(Color::DarkGray),
     ));
 

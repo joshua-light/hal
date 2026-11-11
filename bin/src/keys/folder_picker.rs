@@ -1,27 +1,23 @@
-// Clippy wants each arm's lone `if` folded into a match guard. A failing
-// guard falls through to later arms (Places-mode Space would then type into
-// the filter), so the nested `if`s stay.
-#![allow(clippy::collapsible_match)]
-
+use super::{typed, Typed};
 use crate::scan_msg::ScanMsg;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::KeyEvent;
 use hal_lib::app::App;
 use hal_lib::folder_picker::PickerMode;
-use hal_lib::keymap::{self, FolderKey};
+use hal_lib::keymap::{self, FilterKey, FolderKey, TextKey};
 use hal_lib::spawn;
 use tokio::sync::mpsc;
 
 pub(super) fn handle(app: &mut App, key: KeyEvent) {
     // Places mode (task assign): printable keys type into the fuzzy
-    // filter, so the scheme's picker bindings below must not fire. Navigation is arrows plus ctrl-j/k and ctrl-n/p.
+    // filter, so the scheme's picker bindings below must not fire.
     if app
         .folder_picker
         .as_ref()
         .is_some_and(|p| p.mode == PickerMode::Places)
     {
-        match key.code {
-            KeyCode::Esc => app.close_folder_picker(),
-            KeyCode::Enter | KeyCode::Char(' ') => {
+        match typed(app.keys.maps().filter_picker, &key) {
+            Typed::Do(FilterKey::Cancel) => app.close_folder_picker(),
+            Typed::Do(FilterKey::Confirm) => {
                 // Don't let an empty match list cancel the picker —
                 // pick_from_folder_picker closes on no selection.
                 if app
@@ -32,37 +28,28 @@ pub(super) fn handle(app: &mut App, key: KeyEvent) {
                     pick_from_folder_picker(app);
                 }
             }
-            KeyCode::Tab => app.toggle_places_picker_mode(),
-            KeyCode::Down => {
+            Typed::Do(FilterKey::Switch) => app.toggle_places_picker_mode(),
+            Typed::Do(FilterKey::Down) => {
                 if let Some(p) = app.folder_picker.as_mut() {
                     p.move_down();
                 }
             }
-            KeyCode::Up => {
+            Typed::Do(FilterKey::Up) => {
                 if let Some(p) = app.folder_picker.as_mut() {
                     p.move_up();
                 }
             }
-            KeyCode::Backspace => {
+            Typed::Do(FilterKey::Erase) => {
                 if let Some(p) = app.folder_picker.as_mut() {
                     p.pop_filter();
                 }
             }
-            KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                if let Some(p) = app.folder_picker.as_mut() {
-                    match c {
-                        'j' | 'n' => p.move_down(),
-                        'k' | 'p' => p.move_up(),
-                        _ => {}
-                    }
-                }
-            }
-            KeyCode::Char(c) => {
+            Typed::Char(c) => {
                 if let Some(p) = app.folder_picker.as_mut() {
                     p.push_filter(c);
                 }
             }
-            _ => {}
+            Typed::Nothing => {}
         }
         return;
     }
@@ -128,26 +115,26 @@ pub(super) fn handle(app: &mut App, key: KeyEvent) {
 }
 
 pub(super) fn handle_gh_create(app: &mut App, key: KeyEvent, scan_tx: &mpsc::Sender<ScanMsg>) {
-    match key.code {
-        KeyCode::Esc => {
+    match typed(app.keys.maps().text_input, &key) {
+        Typed::Do(TextKey::Cancel) => {
             app.close_gh_create_input();
         }
-        KeyCode::Tab => {
+        Typed::Do(TextKey::Switch) => {
             if let Some(input) = app.gh_create_input.as_mut() {
                 input.private = !input.private;
             }
         }
-        KeyCode::Backspace => {
+        Typed::Do(TextKey::Erase) => {
             if let Some(input) = app.gh_create_input.as_mut() {
                 input.name.pop();
             }
         }
-        KeyCode::Char(c) => {
+        Typed::Char(c) => {
             if let Some(input) = app.gh_create_input.as_mut() {
                 input.name.push(c);
             }
         }
-        KeyCode::Enter => {
+        Typed::Do(TextKey::Submit) => {
             let name_empty = app
                 .gh_create_input
                 .as_ref()
@@ -180,7 +167,7 @@ pub(super) fn handle_gh_create(app: &mut App, key: KeyEvent, scan_tx: &mpsc::Sen
                 ));
             }
         }
-        _ => {}
+        Typed::Nothing => {}
     }
 }
 

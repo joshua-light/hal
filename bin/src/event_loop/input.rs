@@ -2,8 +2,9 @@ use super::render::Redraw;
 use crate::keys;
 use crate::scan_msg::ScanMsg;
 use crate::term::Term;
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{self, Event, KeyEventKind};
 use hal_lib::app::{App, View};
+use hal_lib::keymap::{self, AnywhereKey};
 use std::io;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
@@ -79,7 +80,7 @@ pub(super) async fn drain_input(
                         app.view,
                         app.current_tab
                     );
-                    // Ctrl+L: classic manual full repaint, and a live
+                    // Redraw (Ctrl+L): classic manual full repaint, and a live
                     // diagnostic — if a "stuck" highlight snaps right
                     // after this, the physical screen had diverged from
                     // ratatui's buffer. Intercepted here so it works in
@@ -89,11 +90,12 @@ pub(super) async fn drain_input(
                     // Nothing in this arm uses an early `continue`: it
                     // would skip the poll(0) burst check below and block
                     // the next read() on an empty queue.
-                    let force_redraw = key.code == KeyCode::Char('l')
-                        && key.modifiers.contains(KeyModifiers::CONTROL)
+                    let everywhere = app.keys.maps().everywhere;
+                    let force_redraw = keymap::resolve(everywhere, &key)
+                        == Some(AnywhereKey::Redraw)
                         && !matches!(app.view, View::TmuxPane | View::Dock);
                     if force_redraw {
-                        log::debug!("key: ctrl+l — manual full redraw");
+                        log::debug!("key: manual full redraw");
                         terminal.clear()?;
                     } else if key.kind != KeyEventKind::Release {
                         // Repeat is routed like Press: kitty (we push

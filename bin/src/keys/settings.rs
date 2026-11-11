@@ -1,19 +1,20 @@
-use crossterm::event::{KeyCode, KeyEvent};
+use super::{typed, Typed};
+use crossterm::event::KeyEvent;
 use hal_lib::app::App;
-use hal_lib::keymap::{self, SettingsKey};
+use hal_lib::keymap::{self, SettingsKey, TextKey};
 
 /// The settings window. While a colour is being typed, keys belong to its
 /// text box; otherwise the scheme's table says what they do.
 pub(super) fn handle(app: &mut App, key: KeyEvent) {
     if let Some(text) = app.settings.editing.as_mut() {
-        match key.code {
-            KeyCode::Esc => app.settings.editing = None,
-            KeyCode::Enter => app.settings_submit_color(),
-            KeyCode::Backspace => {
+        match typed(app.keys.maps().text_input, &key) {
+            Typed::Do(TextKey::Cancel) => app.settings.editing = None,
+            Typed::Do(TextKey::Submit) => app.settings_submit_color(),
+            Typed::Do(TextKey::Erase) => {
                 text.pop();
             }
-            KeyCode::Char(c) => text.push(c),
-            _ => {}
+            Typed::Char(c) => text.push(c),
+            Typed::Do(TextKey::Switch) | Typed::Nothing => {}
         }
         return;
     }

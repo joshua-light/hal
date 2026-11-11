@@ -29,7 +29,10 @@ pub(crate) fn render_tmux_pane(frame: &mut Frame, area: Rect, app: &mut App) {
                 .add_modifier(Modifier::BOLD),
         ))
         .title_bottom(Span::styled(
-            " F1 detach & close ",
+            format!(
+                " {} detach & close ",
+                crate::keymap::key_for(app.keys.maps().pane, crate::keymap::PaneKey::Release)
+            ),
             Style::default().fg(DIM_TEXT),
         ));
     let inner = block.inner(popup_area);

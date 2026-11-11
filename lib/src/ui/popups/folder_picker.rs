@@ -19,7 +19,7 @@ pub(crate) fn render_folder_picker(frame: &mut Frame, area: Rect, app: &App) {
     };
     let assigning = app.tasks.pending_assign.is_some();
     if picker.mode == PickerMode::Places {
-        render_places_picker(frame, area, picker, assigning);
+        render_places_picker(frame, area, picker, assigning, app.keys);
         return;
     }
     let bookmarks_mode = picker.mode == PickerMode::Bookmarks;
@@ -143,7 +143,13 @@ pub(crate) fn render_folder_picker(frame: &mut Frame, area: Rect, app: &App) {
 /// Places mode of the assign / new-session picker: a flat, fuzzy-filterable
 /// list of known directories (bookmarks, recent cwds).
 /// The top row is the live filter; matched chars are highlighted in each row.
-fn render_places_picker(frame: &mut Frame, area: Rect, picker: &FolderPicker, assigning: bool) {
+fn render_places_picker(
+    frame: &mut Frame,
+    area: Rect,
+    picker: &FolderPicker,
+    assigning: bool,
+    keys: crate::keymap::Scheme,
+) {
     let popup = centered_fixed(area, 80, 24);
     frame.render_widget(Clear, popup);
 
@@ -159,7 +165,7 @@ fn render_places_picker(frame: &mut Frame, area: Rect, picker: &FolderPicker, as
             .add_modifier(Modifier::BOLD),
     ))
     .title_bottom(Span::styled(
-        " type:filter · ↑/↓:move · enter/space:pick · tab:browse · esc:cancel ",
+        format!(" {} ", hints::filter(keys, " · ", "pick", Some("browse"))),
         Style::default().fg(DIM_TEXT),
     ));
     let inner = block.inner(popup);
@@ -182,7 +188,11 @@ fn render_places_picker(frame: &mut Frame, area: Rect, picker: &FolderPicker, as
     let mut lines: Vec<Line<'static>> = Vec::new();
     if picker.rows.is_empty() {
         lines.push(Line::from(Span::styled(
-            "  (no matches — backspace to widen, tab to browse)",
+            format!(
+                "  (no matches — {} to widen, {} to browse)",
+                crate::keymap::key_for(keys.maps().filter_picker, crate::keymap::FilterKey::Erase),
+                crate::keymap::key_for(keys.maps().filter_picker, crate::keymap::FilterKey::Switch)
+            ),
             Style::default().fg(Color::DarkGray),
         )));
     } else {
@@ -241,7 +251,16 @@ pub(crate) fn render_gh_create_input(frame: &mut Frame, area: Rect, app: &App) {
             .add_modifier(Modifier::BOLD),
     ))
     .title_bottom(Span::styled(
-        " type name · tab: toggle public/private · enter: create · esc: cancel ",
+        format!(
+            " type name · {} ",
+            hints::text(
+                app.keys,
+                " · ",
+                "create",
+                "cancel",
+                Some("toggle public/private")
+            )
+        ),
         Style::default().fg(DIM_TEXT),
     ));
     let inner = block.inner(popup);

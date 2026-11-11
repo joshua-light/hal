@@ -3,11 +3,13 @@
 //! events against the tables; the status bar and popup footers print their
 //! hints from the same rows, so a hint cannot name a key that is not bound.
 //!
-//! Text inputs and type-to-filter pickers are not here: their printable keys
-//! are text under every scheme.
+//! Text inputs, type-to-filter pickers and the pane have tables too
+//! ([`shared`]): a key they do not bind is typed. No handler names a key
+//! itself, so `[keymap]` reaches every one; a test in `bin/` holds that.
 //!
 //! - `ide`: arrows and the usual editor chords. The default.
 //! - `vim`: `hjkl` and single letters.
+//! - `shared`: the places both schemes bind alike.
 //! - `layout`: Cyrillic letters read as the key they sit on.
 //! - `names`: what each action is called in `config.toml`.
 //! - `custom`: `[keymap]`, the user's keys laid over a scheme.
@@ -20,6 +22,7 @@ mod custom;
 mod ide;
 mod layout;
 mod names;
+mod shared;
 mod vim;
 
 pub use custom::{dump, problems, KeyList, Overrides};
@@ -121,7 +124,8 @@ impl Key {
     /// on `Ctrl+P`, the chord a Mac user reaches for. Shift is ignored on printable keys, whose character already
     /// says it, and on BackTab, which is Shift+Tab by definition. A Ctrl
     /// chord ignores letter case: only the kitty protocol tells `Ctrl+T`
-    /// from `Ctrl+Shift+T`.
+    /// from `Ctrl+Shift+T`, so `Ctrl+T` answers to both and
+    /// `Ctrl+Shift+T` only to a terminal that reports the Shift.
     pub fn matches(&self, ev: &KeyEvent) -> bool {
         let chord = KeyModifiers::CONTROL | KeyModifiers::ALT;
         let mut pressed = ev.modifiers;
@@ -134,7 +138,9 @@ impl Key {
         match (self.code, ev.code) {
             (KeyCode::Char(a), KeyCode::Char(b)) => {
                 if self.mods.contains(KeyModifiers::CONTROL) {
+                    let shifted = ev.modifiers.contains(KeyModifiers::SHIFT) || b.is_uppercase();
                     a.eq_ignore_ascii_case(&b)
+                        && (shifted || !self.mods.contains(KeyModifiers::SHIFT))
                 } else {
                     a == b
                 }
@@ -245,6 +251,8 @@ impl Key {
         if mods.contains(KeyModifiers::SHIFT) {
             match code {
                 KeyCode::Tab | KeyCode::BackTab => code = KeyCode::BackTab,
+                // Ctrl+Shift+letter keeps its Shift: see `matches`.
+                KeyCode::Char(c) if c.is_alphabetic() && mods.contains(KeyModifiers::CONTROL) => {}
                 KeyCode::Char(c) if c.is_alphabetic() => {
                     code = KeyCode::Char(c.to_uppercase().next().unwrap_or(c));
                 }
@@ -257,7 +265,9 @@ impl Key {
                 }
                 _ => {}
             }
-            if matches!(code, KeyCode::BackTab | KeyCode::Char(_)) {
+            let ctrl_letter = mods.contains(KeyModifiers::CONTROL)
+                && matches!(code, KeyCode::Char(c) if c.is_alphabetic());
+            if matches!(code, KeyCode::BackTab | KeyCode::Char(_)) && !ctrl_letter {
                 mods -= KeyModifiers::SHIFT;
             }
         }
@@ -457,6 +467,52 @@ pub enum SettingsKey {
     Close,
 }
 
+/// A type-to-filter picker: keys it does not bind go into the filter.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FilterKey {
+    Down,
+    Up,
+    Confirm,
+    Cancel,
+    /// Drop the filter's last character.
+    Erase,
+    /// The picker's other list: the next agent, or folders for places.
+    Switch,
+}
+
+/// A one-line text box: keys it does not bind are typed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextKey {
+    Submit,
+    Cancel,
+    /// Drop the last character.
+    Erase,
+    /// The box's other field or mode, where it has one.
+    Switch,
+}
+
+/// The close-session confirmation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConfirmKey {
+    Yes,
+    No,
+}
+
+/// The keys the hub keeps while the embedded pane has the keyboard.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PaneKey {
+    /// Give the keyboard back to the hub.
+    Release,
+    /// Paste the host clipboard into the pane.
+    Paste,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AnywhereKey {
+    /// Repaint the whole screen.
+    Redraw,
+}
+
 /// One scheme's tables.
 ///
 /// [`PLACES`] lists the fields by name: the `<place>` of `[keymap.<place>]`.
@@ -474,9 +530,23 @@ pub struct Keymaps {
     pub live_tail: Keymap<ScrollKey>,
     pub list_picker: Keymap<ListKey>,
     pub folders: Keymap<FolderKey>,
+    pub filter_picker: Keymap<FilterKey>,
+    pub session_finder: Keymap<FilterKey>,
+    pub text_input: Keymap<TextKey>,
+    pub confirm_close: Keymap<ConfirmKey>,
+    pub pane: Keymap<PaneKey>,
+    pub everywhere: Keymap<AnywhereKey>,
 }
 
-pub(crate) const PLACES: [&str; 12] = [
+/// Every key bound to `action`, as hints print them: `enter/space`.
+pub fn keys_for<A: Copy + PartialEq>(map: Keymap<A>, action: A) -> String {
+    map.iter()
+        .find(|b| b.action == action)
+        .map(|b| key_names(b.keys))
+        .unwrap_or_default()
+}
+
+pub(crate) const PLACES: [&str; 18] = [
     "global",
     "sessions",
     "board",
@@ -489,6 +559,12 @@ pub(crate) const PLACES: [&str; 12] = [
     "live_tail",
     "list_picker",
     "folders",
+    "filter_picker",
+    "session_finder",
+    "text_input",
+    "confirm_close",
+    "pane",
+    "everywhere",
 ];
 
 #[cfg(test)]
@@ -518,6 +594,12 @@ mod tests {
                 names_of(m.live_tail),
                 names_of(m.list_picker),
                 names_of(m.folders),
+                names_of(m.filter_picker),
+                names_of(m.session_finder),
+                names_of(m.text_input),
+                names_of(m.confirm_close),
+                names_of(m.pane),
+                names_of(m.everywhere),
             ];
             for (place, names) in PLACES.iter().zip(places) {
                 for (i, name) in names.iter().enumerate() {
@@ -544,7 +626,13 @@ mod tests {
     fn a_key_parses_back_from_its_label() {
         for scheme in Scheme::ALL {
             let m = scheme.defaults();
-            let keys = [keys_of(m.global), keys_of(m.sessions), keys_of(m.board)];
+            let keys = [
+                keys_of(m.global),
+                keys_of(m.sessions),
+                keys_of(m.board),
+                keys_of(m.filter_picker),
+                keys_of(m.pane),
+            ];
             for key in keys.iter().flatten().flat_map(|ks| ks.iter()) {
                 assert_eq!(Key::parse(&key.label()), Ok(*key), "{}", key.label());
             }
@@ -563,6 +651,15 @@ mod tests {
         assert_eq!(Key::parse("f"), Ok(ch('f')));
         assert_eq!(Key::parse("+"), Ok(ch('+')));
         assert_eq!(Key::parse("ctrl++"), Ok(ctrl(ch('+'))));
+        // Only a Ctrl chord keeps Shift on a letter.
+        let paste = ctrl(shift(ch('v')));
+        assert_eq!(Key::parse("ctrl+shift+v"), Ok(paste));
+        assert_eq!(paste.label(), "ctrl+shift+v");
+        assert!(!paste.matches(&KeyEvent::new(KeyCode::Char('v'), KeyModifiers::CONTROL)));
+        assert!(paste.matches(&KeyEvent::new(
+            KeyCode::Char('V'),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT
+        )));
         assert!(Key::parse("f13").is_err());
         assert!(Key::parse("shift+1").is_err());
         assert!(Key::parse("").is_err());
@@ -623,6 +720,11 @@ mod tests {
                 ("live tail", keys_of(m.live_tail)),
                 ("list picker", keys_of(m.list_picker)),
                 ("folders", keys_of(m.folders)),
+                ("filter picker", keys_of(m.filter_picker)),
+                ("session finder", keys_of(m.session_finder)),
+                ("text input", keys_of(m.text_input)),
+                ("confirm close", keys_of(m.confirm_close)),
+                ("pane", keys_of(m.pane)),
             ];
             for (place, keys) in places {
                 assert_no_key_bound_twice(scheme, place, &keys);

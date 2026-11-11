@@ -1,17 +1,15 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::KeyEvent;
 use hal_lib::app::App;
+use hal_lib::keymap::{self, PaneKey};
 
-/// F1 and Ctrl+Shift+V belong to the hub; every other key goes to the pane.
+/// The pane table's keys belong to the hub; every other key goes to the
+/// pane.
 pub(super) fn handle(app: &mut App, key: KeyEvent) {
-    match key.code {
-        KeyCode::F(1) => {
+    match keymap::resolve(app.keys.maps().pane, &key) {
+        Some(PaneKey::Release) => {
             app.release_pane();
         }
-        KeyCode::Char(c)
-            if (c == 'v' || c == 'V')
-                && key.modifiers.contains(KeyModifiers::CONTROL)
-                && key.modifiers.contains(KeyModifiers::SHIFT) =>
-        {
+        Some(PaneKey::Paste) => {
             let status = match hal_lib::clipboard::paste() {
                 Ok(text) if text.is_empty() => Some("clipboard empty".to_string()),
                 Ok(text) => match app.focused_pane() {
@@ -27,7 +25,7 @@ pub(super) fn handle(app: &mut App, key: KeyEvent) {
                 app.set_status(msg);
             }
         }
-        _ => {
+        None => {
             if let Some(pane) = app.focused_pane() {
                 pane.send_key(key);
             }

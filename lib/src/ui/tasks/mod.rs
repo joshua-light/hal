@@ -104,9 +104,19 @@ fn render_filter_bar(frame: &mut Frame, area: Rect, app: &App, editing: bool) {
         query.push(CURSOR);
     }
     let hint = if editing {
-        "  enter:apply  esc:clear"
+        format!(
+            "  {}",
+            crate::ui::hints::text(app.keys, "  ", "apply", "clear", None)
+        )
     } else {
-        "  /:edit  esc:clear"
+        use crate::app::TasksCommand as T;
+        use crate::keymap::{key_for, BoardKey};
+        let board = app.keys.maps().board;
+        format!(
+            "  {}:edit  {}:clear",
+            key_for(board, BoardKey::Do(T::OpenFilter)),
+            key_for(board, BoardKey::Do(T::ClearFilter))
+        )
     };
     let line = Line::from(vec![
         Span::styled(" / ", Style::default().fg(accent_fg())),

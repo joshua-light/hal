@@ -3,8 +3,10 @@
 //! covers go to the current view's bin-side handler.
 //!
 //! Which key does what comes from the tables of the key scheme in force
-//! ([`hal_lib::keymap`]). Only text inputs, type-to-filter pickers and the
-//! pane match on key codes here: they take the same keys under every scheme.
+//! ([`hal_lib::keymap`]), so `[keymap]` in the config can move any of them.
+//! No handler here names a key: text inputs and filter pickers ask their
+//! table first ([`typed`]) and type what it does not bind. A test below
+//! fails on a handler that matches a key code itself.
 //!
 //! - `sessions`: Sessions-tab commands, close confirmation, session finder,
 //!   rename.
@@ -19,7 +21,7 @@ use crate::scan_msg::ScanMsg;
 use crate::term::Term;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use hal_lib::app::{App, Command, Tab, View};
-use hal_lib::keymap::{self, Scheme, ScrollKey};
+use hal_lib::keymap::{self, Keymap, Scheme, ScrollKey};
 use tokio::sync::mpsc;
 
 mod folder_picker;
@@ -30,6 +32,26 @@ mod pickers;
 mod sessions;
 mod settings;
 mod tasks;
+
+/// What a key means where printable keys are text.
+pub(super) enum Typed<A> {
+    Do(A),
+    Char(char),
+    Nothing,
+}
+
+/// `key` in a text box or filter picker: its table's action, else the
+/// character it types. A Ctrl, Alt or Cmd chord types nothing.
+pub(super) fn typed<A: Copy>(map: Keymap<A>, key: &KeyEvent) -> Typed<A> {
+    if let Some(action) = keymap::resolve(map, key) {
+        return Typed::Do(action);
+    }
+    let chord = KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER;
+    match key.code {
+        KeyCode::Char(c) if !key.modifiers.intersects(chord) => Typed::Char(c),
+        _ => Typed::Nothing,
+    }
+}
 
 /// Map a key press onto a [`Command`] when a converted arm covers it.
 ///
@@ -82,7 +104,7 @@ pub(crate) async fn handle_key(
 fn is_stray_vim_key(app: &App, key: &KeyEvent) -> bool {
     app.keys == Scheme::Ide
         && app.view == View::Grid
-        && matches!(key.code, KeyCode::Char('j' | 'k'))
+        && matches!(key.code, KeyCode::Char(c) if matches!(c, 'j' | 'k'))
         && !key
             .modifiers
             .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER)
@@ -131,5 +153,59 @@ fn handle_view_key(app: &mut App, key: KeyEvent, scan_tx: &mpsc::Sender<ScanMsg>
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// `[keymap]` can only move a key that a table binds. A handler that
+    /// matches `KeyCode::Esc` or `KeyCode::Char('x')` itself puts that key
+    /// out of the user's reach, so none may: bind it in `hal_lib::keymap`
+    /// and resolve it. `KeyCode::Char(c)`, a typed character, is fine.
+    #[test]
+    fn no_handler_names_a_key() {
+        let sources = [
+            ("keys/mod.rs", include_str!("mod.rs")),
+            ("keys/folder_picker.rs", include_str!("folder_picker.rs")),
+            ("keys/harness.rs", include_str!("harness.rs")),
+            ("keys/metrics.rs", include_str!("metrics.rs")),
+            ("keys/pane.rs", include_str!("pane.rs")),
+            ("keys/pickers.rs", include_str!("pickers.rs")),
+            ("keys/sessions.rs", include_str!("sessions.rs")),
+            ("keys/settings.rs", include_str!("settings.rs")),
+            ("keys/tasks.rs", include_str!("tasks.rs")),
+            (
+                "event_loop/input.rs",
+                include_str!("../event_loop/input.rs"),
+            ),
+        ];
+        // Built here so this file does not trip its own check.
+        let needle = ["Key", "Code::"].concat();
+        for (file, source) in sources {
+            let code = source.split("#[cfg(test)]\nmod tests").next().unwrap();
+            for (n, line) in code.lines().enumerate() {
+                if line.trim_start().starts_with("//") {
+                    continue;
+                }
+                for (at, _) in line.match_indices(&needle) {
+                    let rest = &line[at + needle.len()..];
+                    assert!(
+                        rest.starts_with("Char(c)"),
+                        "{}:{} names a key; bind it in a keymap table instead:\n{}",
+                        file,
+                        n + 1,
+                        line.trim()
+                    );
+                }
+            }
+        }
+    }
+
+    /// Every file under `keys/` is in the list above.
+    #[test]
+    fn the_check_covers_every_handler_file() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/keys");
+        let count = std::fs::read_dir(dir).unwrap().count();
+        assert_eq!(count, 9, "add the new file to no_handler_names_a_key");
     }
 }

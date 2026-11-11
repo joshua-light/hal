@@ -354,7 +354,14 @@ pub(super) fn render_settings(
         Style::default().fg(FAINT_TEXT),
     ))];
     if d.editing.is_some() {
-        lines.push(Line::from(Span::styled("enter saves · esc cancels", dim)));
+        use crate::keymap::{key_for, TextKey};
+        let keys = crate::config::get().ui.keys.maps().text_input;
+        let hint = format!(
+            "{} saves · {} cancels",
+            key_for(keys, TextKey::Submit),
+            key_for(keys, TextKey::Cancel)
+        );
+        lines.push(Line::from(Span::styled(hint, dim)));
     }
     lines.push(Line::default());
     let trigger = match spec.trigger.kind {

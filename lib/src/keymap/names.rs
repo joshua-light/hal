@@ -205,3 +205,53 @@ impl Action for SettingsKey {
         }
     }
 }
+
+impl Action for FilterKey {
+    fn name(self) -> &'static str {
+        match self {
+            FilterKey::Down => "down",
+            FilterKey::Up => "up",
+            FilterKey::Confirm => "confirm",
+            FilterKey::Cancel => "cancel",
+            FilterKey::Erase => "erase",
+            FilterKey::Switch => "switch",
+        }
+    }
+}
+
+impl Action for TextKey {
+    fn name(self) -> &'static str {
+        match self {
+            TextKey::Submit => "submit",
+            TextKey::Cancel => "cancel",
+            TextKey::Erase => "erase",
+            TextKey::Switch => "switch",
+        }
+    }
+}
+
+impl Action for ConfirmKey {
+    fn name(self) -> &'static str {
+        match self {
+            ConfirmKey::Yes => "yes",
+            ConfirmKey::No => "no",
+        }
+    }
+}
+
+impl Action for PaneKey {
+    fn name(self) -> &'static str {
+        match self {
+            PaneKey::Release => "release",
+            PaneKey::Paste => "paste",
+        }
+    }
+}
+
+impl Action for AnywhereKey {
+    fn name(self) -> &'static str {
+        match self {
+            AnywhereKey::Redraw => "redraw",
+        }
+    }
+}

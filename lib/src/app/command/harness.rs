@@ -264,7 +264,12 @@ impl App {
             false,
         ) {
             Ok(tmux) => {
-                self.set_status(format!("{}: Claude in {} — F1 detaches", name, cwd));
+                let release =
+                    crate::keymap::key_for(self.keys.maps().pane, crate::keymap::PaneKey::Release);
+                self.set_status(format!(
+                    "{}: Claude in {} — {} detaches",
+                    name, cwd, release
+                ));
                 vec![Effect::OpenTmuxPane { tmux }]
             }
             Err(e) => {

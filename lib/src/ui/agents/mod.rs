@@ -65,7 +65,10 @@ pub(crate) fn hints(app: &App) -> String {
     }
     let d = &app.harness.detail;
     if d.editing.is_some() {
-        return "type a value  enter:save  esc:cancel".into();
+        return format!(
+            "type a value  {}",
+            crate::ui::hints::text(app.keys, "  ", "save", "cancel", None)
+        );
     }
     let section = d.section;
     keymap::hints_with(maps.agent_page, "  ", |cmd| match (cmd, section) {

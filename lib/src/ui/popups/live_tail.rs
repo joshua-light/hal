@@ -99,7 +99,12 @@ pub(crate) fn render_live_tail(frame: &mut Frame, area: Rect, app: &mut App) {
 
     let bottom_y = popup_area.y + popup_area.height - 1;
 
-    let hint_text = " ↑/↓ scroll · G bottom · esc close ";
+    let hint_text = format!(
+        " {} ",
+        crate::keymap::hints_with(app.keys.maps().live_tail, " · ", |_| {
+            crate::keymap::Hint::Keep
+        })
+    );
     let hint_width = (hint_text.chars().count() as u16).min(inner.width);
     let hint = Paragraph::new(Line::from(Span::styled(
         hint_text,

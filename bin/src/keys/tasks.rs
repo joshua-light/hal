@@ -1,8 +1,9 @@
+use super::{typed, Typed};
+use crossterm::event::KeyEvent;
 #[cfg(test)]
-use crossterm::event::KeyModifiers;
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyModifiers};
 use hal_lib::app::{App, Command, Tab, TasksCommand, View};
-use hal_lib::keymap::{self, BoardKey, TaskInfoKey};
+use hal_lib::keymap::{self, BoardKey, TaskInfoKey, TextKey};
 
 /// Map a Tasks-board or Tasks-modal-submit key onto a [`Command`]. The
 /// Esc-clears-filter binding claims Esc only while a filter is set, so an
@@ -12,7 +13,7 @@ use hal_lib::keymap::{self, BoardKey, TaskInfoKey};
 pub(super) fn map_tasks_command(app: &App, key: &KeyEvent) -> Option<Command> {
     use TasksCommand as T;
     let maps = app.keys.maps();
-    let enter = key.code == KeyCode::Enter;
+    let submit = || keymap::resolve(maps.text_input, key) == Some(TextKey::Submit);
     let cmd = match app.view {
         View::Grid if app.current_tab == Tab::Tasks => match keymap::resolve(maps.board, key)? {
             BoardKey::Do(T::ClearFilter) if app.tasks.filter.is_empty() => return None,
@@ -25,10 +26,10 @@ pub(super) fn map_tasks_command(app: &App, key: &KeyEvent) -> Option<Command> {
             TaskInfoKey::Remove => T::RemoveAttachment,
             _ => return None,
         },
-        View::TaskInput if enter => T::SubmitInput,
-        View::TaskTags if enter => T::SubmitTags,
-        View::TaskAttachInput if enter => T::SubmitAttach,
-        View::TaskFilter if enter => T::ApplyFilter,
+        View::TaskInput if submit() => T::SubmitInput,
+        View::TaskTags if submit() => T::SubmitTags,
+        View::TaskAttachInput if submit() => T::SubmitAttach,
+        View::TaskFilter if submit() => T::ApplyFilter,
         _ => return None,
     };
     Some(Command::Tasks(cmd))
@@ -94,27 +95,29 @@ fn task_info(app: &mut App, action: TaskInfoKey) {
 
 /// Typing into the add/rename, tag, attach and filter buffers.
 fn edit_buffer(app: &mut App, key: KeyEvent) -> bool {
-    match (&app.view, key.code) {
-        (View::TaskInput, KeyCode::Esc) => app.close_task_input(),
-        (View::TaskInput, KeyCode::Tab) => app.toggle_task_input_field(),
-        (View::TaskInput, KeyCode::Backspace) => {
+    use TextKey as K;
+    let key = typed(app.keys.maps().text_input, &key);
+    match (&app.view, key) {
+        (View::TaskInput, Typed::Do(K::Cancel)) => app.close_task_input(),
+        (View::TaskInput, Typed::Do(K::Switch)) => app.toggle_task_input_field(),
+        (View::TaskInput, Typed::Do(K::Erase)) => {
             app.task_input_buffer().pop();
         }
-        (View::TaskInput, KeyCode::Char(c)) => app.task_input_buffer().push(c),
-        (View::TaskTags, KeyCode::Esc) => app.close_task_tags(),
-        (View::TaskTags, KeyCode::Backspace) => {
+        (View::TaskInput, Typed::Char(c)) => app.task_input_buffer().push(c),
+        (View::TaskTags, Typed::Do(K::Cancel)) => app.close_task_tags(),
+        (View::TaskTags, Typed::Do(K::Erase)) => {
             app.tasks.input.pop();
         }
-        (View::TaskTags, KeyCode::Char(c)) => app.tasks.input.push(c),
-        (View::TaskAttachInput, KeyCode::Esc) => app.close_task_attach(),
-        (View::TaskAttachInput, KeyCode::Tab) => app.toggle_task_attach_mode(),
-        (View::TaskAttachInput, KeyCode::Backspace) => {
+        (View::TaskTags, Typed::Char(c)) => app.tasks.input.push(c),
+        (View::TaskAttachInput, Typed::Do(K::Cancel)) => app.close_task_attach(),
+        (View::TaskAttachInput, Typed::Do(K::Switch)) => app.toggle_task_attach_mode(),
+        (View::TaskAttachInput, Typed::Do(K::Erase)) => {
             app.tasks.input.pop();
         }
-        (View::TaskAttachInput, KeyCode::Char(c)) => app.tasks.input.push(c),
-        (View::TaskFilter, KeyCode::Esc) => app.clear_task_filter(),
-        (View::TaskFilter, KeyCode::Backspace) => app.task_filter_pop(),
-        (View::TaskFilter, KeyCode::Char(c)) => app.task_filter_push(c),
+        (View::TaskAttachInput, Typed::Char(c)) => app.tasks.input.push(c),
+        (View::TaskFilter, Typed::Do(K::Cancel)) => app.clear_task_filter(),
+        (View::TaskFilter, Typed::Do(K::Erase)) => app.task_filter_pop(),
+        (View::TaskFilter, Typed::Char(c)) => app.task_filter_push(c),
         _ => return false,
     }
     true

@@ -1,7 +1,6 @@
 //! Header bands: the title bar and the tab strip.
 
 use crate::app::{visible_tabs, App};
-use crate::keymap::Scheme;
 use crate::ui::palette::{accent_fg, separator_fg};
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -56,10 +55,20 @@ pub(super) fn render_tab_strip(frame: &mut Frame, area: Rect, app: &mut App) {
         names.push(Span::styled(name, name_style));
         rule.push(rule_span);
     }
-    let hint = match app.keys {
-        Scheme::Ide => "   ⇥ next · ⇧⇥ prev tab · , settings",
-        Scheme::Vim => "   ⇥/K next · ⇧⇥/J prev tab · , settings",
+    let global = app.keys.maps().global;
+    let keys = |cmd| {
+        let names = crate::keymap::keys_for(global, cmd);
+        // The strip is tight: glyphs for the two keys that have them.
+        let names = names.replace("ctrl+shift+tab", "").replace("ctrl+tab", "");
+        let names = names.replace("shift+tab", "⇧⇥").replace("tab", "⇥");
+        names.trim_matches('/').replace("//", "/")
     };
+    let hint = format!(
+        "   {} next · {} prev tab · {} settings",
+        keys(crate::app::GlobalCommand::CycleTab { back: false }),
+        keys(crate::app::GlobalCommand::CycleTab { back: true }),
+        keys(crate::app::GlobalCommand::OpenSettings),
+    );
     names.push(Span::styled(hint, Style::default().fg(HINT_GRAY)));
     let drawn: usize = rule.iter().map(|s| s.content.chars().count()).sum();
     rule.push(Span::styled(

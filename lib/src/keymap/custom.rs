@@ -134,6 +134,12 @@ pub(super) fn customize(base: &Keymaps, overrides: &Overrides) -> (Keymaps, Vec<
         live_tail: place!(live_tail, &[]),
         list_picker: place!(list_picker, &[]),
         folders: place!(folders, &[]),
+        filter_picker: place!(filter_picker, &[]),
+        session_finder: place!(session_finder, &[]),
+        text_input: place!(text_input, &[]),
+        confirm_close: place!(confirm_close, &[]),
+        pane: place!(pane, &[]),
+        everywhere: place!(everywhere, &[]),
     };
     (maps, problems)
 }
@@ -269,7 +275,13 @@ pub fn dump(scheme: Scheme) -> String {
         popup,
         live_tail,
         list_picker,
-        folders
+        folders,
+        filter_picker,
+        session_finder,
+        text_input,
+        confirm_close,
+        pane,
+        everywhere
     );
     out
 }
@@ -370,6 +382,26 @@ mod tests {
         assert_eq!(
             resolve(maps.sessions, &press("ctrl+n")),
             Some(Command::Sessions(S::SpawnAgentHere))
+        );
+    }
+
+    #[test]
+    fn text_boxes_and_the_pane_rebind_too() {
+        let (maps, problems) = custom(
+            Scheme::Ide,
+            "[text_input]\nsubmit = 'ctrl+s'\n[pane]\nrelease = 'f12'\n[everywhere]\nredraw = 'f5'\n",
+        );
+        assert!(problems.is_empty(), "{:?}", problems);
+        assert_eq!(
+            resolve(maps.text_input, &press("ctrl+s")),
+            Some(TextKey::Submit)
+        );
+        assert_eq!(resolve(maps.text_input, &press("enter")), None);
+        assert_eq!(resolve(maps.pane, &press("f12")), Some(PaneKey::Release));
+        assert_eq!(resolve(maps.pane, &press("f1")), None);
+        assert_eq!(
+            resolve(maps.everywhere, &press("f5")),
+            Some(AnywhereKey::Redraw)
         );
     }
 

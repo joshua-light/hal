@@ -1,6 +1,7 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use super::{typed, Typed};
+use crossterm::event::KeyEvent;
 use hal_lib::app::{App, Command, HarnessCommand as H, Tab, View};
-use hal_lib::keymap;
+use hal_lib::keymap::{self, TextKey};
 
 /// Agents list and page key mapping. The key that gives the page the
 /// keyboard is the one that gives a session's pane the keyboard on the
@@ -9,21 +10,17 @@ use hal_lib::keymap;
 pub(super) fn map_harness_command(app: &App, key: &KeyEvent) -> Option<Command> {
     let maps = app.keys.maps();
     let editing = app.harness.detail.editing.is_some();
-    let cmd = match (&app.view, key.code) {
-        (View::Grid, _) if app.current_tab == Tab::Agents => keymap::resolve(maps.agents, key)?,
-
+    let cmd = match app.view {
+        View::Grid if app.current_tab == Tab::Agents => keymap::resolve(maps.agents, key)?,
         // Typing a setting's value: every printable key is text.
-        (View::AgentDetail, KeyCode::Esc) if editing => H::EditCancel,
-        (View::AgentDetail, KeyCode::Enter) if editing => H::EditSubmit,
-        (View::AgentDetail, KeyCode::Backspace) if editing => H::EditBackspace,
-        (View::AgentDetail, KeyCode::Char(c))
-            if editing && !key.modifiers.contains(KeyModifiers::CONTROL) =>
-        {
-            H::EditChar(c)
-        }
-        (View::AgentDetail, _) if editing => return None,
-
-        (View::AgentDetail, _) => keymap::resolve(maps.agent_page, key)?,
+        View::AgentDetail if editing => match typed(maps.text_input, key) {
+            Typed::Do(TextKey::Cancel) => H::EditCancel,
+            Typed::Do(TextKey::Submit) => H::EditSubmit,
+            Typed::Do(TextKey::Erase) => H::EditBackspace,
+            Typed::Char(c) => H::EditChar(c),
+            Typed::Do(TextKey::Switch) | Typed::Nothing => return None,
+        },
+        View::AgentDetail => keymap::resolve(maps.agent_page, key)?,
         _ => return None,
     };
     Some(Command::Harness(cmd))

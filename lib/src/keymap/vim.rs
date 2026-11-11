@@ -162,4 +162,10 @@ pub(super) static MAPS: Keymaps = Keymaps {
         bind!(FolderKey::GhPrivate, [ch('C')], join),
         bind!(FolderKey::Cancel, [ESC, ch('q')], "esc" => "cancel"),
     ],
+    filter_picker: shared::FILTER_PICKER,
+    session_finder: shared::SESSION_FINDER,
+    text_input: shared::TEXT_INPUT,
+    confirm_close: shared::CONFIRM_CLOSE,
+    pane: shared::PANE,
+    everywhere: shared::EVERYWHERE,
 };

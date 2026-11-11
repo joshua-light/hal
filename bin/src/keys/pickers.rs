@@ -1,32 +1,28 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use super::{typed, Typed};
+use crossterm::event::KeyEvent;
 use hal_lib::app::App;
-use hal_lib::keymap::{self, ListKey};
+use hal_lib::keymap::{self, FilterKey, ListKey};
 
-/// Like the places picker, printable keys belong to the fuzzy filter;
-/// use arrows or ctrl-j/k/n/p to navigate without stealing letters.
+/// Like the places picker, printable keys belong to the fuzzy filter; the
+/// table's arrows and Ctrl chords navigate without stealing letters.
 pub(super) fn model(app: &mut App, key: KeyEvent) {
-    match key.code {
-        KeyCode::Esc => app.close_model_picker(),
-        KeyCode::Enter | KeyCode::Char(' ') => app.spawn_from_model_picker(),
-        KeyCode::Tab => app.cycle_model_picker_agent(),
-        KeyCode::Down => app.model_picker_move(1),
-        KeyCode::Up => app.model_picker_move(-1),
-        KeyCode::Backspace => {
+    match typed(app.keys.maps().filter_picker, &key) {
+        Typed::Do(FilterKey::Cancel) => app.close_model_picker(),
+        Typed::Do(FilterKey::Confirm) => app.spawn_from_model_picker(),
+        Typed::Do(FilterKey::Switch) => app.cycle_model_picker_agent(),
+        Typed::Do(FilterKey::Down) => app.model_picker_move(1),
+        Typed::Do(FilterKey::Up) => app.model_picker_move(-1),
+        Typed::Do(FilterKey::Erase) => {
             if let Some(picker) = app.model_picker.as_mut() {
                 picker.pop_filter();
             }
         }
-        KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) => match c {
-            'j' | 'n' => app.model_picker_move(1),
-            'k' | 'p' => app.model_picker_move(-1),
-            _ => {}
-        },
-        KeyCode::Char(c) => {
+        Typed::Char(c) => {
             if let Some(picker) = app.model_picker.as_mut() {
                 picker.push_filter(c);
             }
         }
-        _ => {}
+        Typed::Nothing => {}
     }
 }
 
@@ -71,29 +67,23 @@ pub(super) fn task_kind(app: &mut App, key: KeyEvent) {
     }
 }
 
-/// Same interaction model as the model picker: printable keys belong
-/// to the fuzzy filter; arrows or ctrl-j/k/n/p navigate.
+/// Same interaction model as the model picker.
 pub(super) fn task_link(app: &mut App, key: KeyEvent) {
-    match key.code {
-        KeyCode::Esc => app.close_task_link_picker(),
-        KeyCode::Enter | KeyCode::Char(' ') => app.confirm_task_link_picker(),
-        KeyCode::Down => app.task_link_picker_move(1),
-        KeyCode::Up => app.task_link_picker_move(-1),
-        KeyCode::Backspace => {
+    match typed(app.keys.maps().filter_picker, &key) {
+        Typed::Do(FilterKey::Cancel) => app.close_task_link_picker(),
+        Typed::Do(FilterKey::Confirm) => app.confirm_task_link_picker(),
+        Typed::Do(FilterKey::Down) => app.task_link_picker_move(1),
+        Typed::Do(FilterKey::Up) => app.task_link_picker_move(-1),
+        Typed::Do(FilterKey::Erase) => {
             if let Some(picker) = app.task_link_picker.as_mut() {
                 picker.pop_filter();
             }
         }
-        KeyCode::Char(c) if key.modifiers.contains(KeyModifiers::CONTROL) => match c {
-            'j' | 'n' => app.task_link_picker_move(1),
-            'k' | 'p' => app.task_link_picker_move(-1),
-            _ => {}
-        },
-        KeyCode::Char(c) => {
+        Typed::Char(c) => {
             if let Some(picker) = app.task_link_picker.as_mut() {
                 picker.push_filter(c);
             }
         }
-        _ => {}
+        Typed::Do(FilterKey::Switch) | Typed::Nothing => {}
     }
 }

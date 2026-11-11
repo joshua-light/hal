@@ -29,7 +29,10 @@ pub(crate) fn render_settings(frame: &mut Frame, area: Rect, app: &App) {
     let popup = centered_fixed(above_status, 64, lines.len() as u16 + 2);
     frame.render_widget(Clear, popup);
     let hints = if view.editing.is_some() {
-        " name, 0–255 or #rrggbb · enter:apply · empty:preset · esc:cancel ".to_string()
+        format!(
+            " name, 0–255 or #rrggbb · empty:preset · {} ",
+            crate::ui::hints::text(app.keys, " · ", "apply", "cancel", None)
+        )
     } else {
         let keys = keymap::hints_with(app.keys.maps().settings, " · ", |_| Hint::Keep);
         format!(" {keys} ")

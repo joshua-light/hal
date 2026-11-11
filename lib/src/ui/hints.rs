@@ -2,7 +2,7 @@
 //! tables. The status bar and the popup footers share them, so the two
 //! always name the same keys.
 
-use crate::keymap::{self, FolderKey, Hint, ListKey, Scheme};
+use crate::keymap::{self, FilterKey, FolderKey, Hint, ListKey, Scheme, TextKey};
 
 /// Hints for the agent, respawn and task-kind pickers. `confirm` names what
 /// Enter does in this one.
@@ -36,4 +36,36 @@ pub(crate) fn folders(scheme: Scheme, sep: &str, mode: Folders) -> String {
         (Folders::Browse, K::Places) => Hint::Skip,
         _ => Hint::Keep,
     })
+}
+
+/// Hints for a one-line text box. `submit` and `cancel` say what those keys
+/// do in this box, `switch` what its second field or mode is, if it has one.
+pub(crate) fn text(
+    scheme: Scheme,
+    sep: &str,
+    submit: &'static str,
+    cancel: &'static str,
+    switch: Option<&'static str>,
+) -> String {
+    keymap::hints_with(scheme.maps().text_input, sep, |key| match key {
+        TextKey::Submit => Hint::As(submit),
+        TextKey::Cancel => Hint::As(cancel),
+        TextKey::Switch => switch.map_or(Hint::Skip, Hint::As),
+        TextKey::Erase => Hint::Keep,
+    })
+}
+
+/// Hints for a type-to-filter picker, named like [`text`]'s.
+pub(crate) fn filter(
+    scheme: Scheme,
+    sep: &str,
+    confirm: &'static str,
+    switch: Option<&'static str>,
+) -> String {
+    let keys = keymap::hints_with(scheme.maps().filter_picker, sep, |key| match key {
+        FilterKey::Confirm => Hint::As(confirm),
+        FilterKey::Switch => switch.map_or(Hint::Skip, Hint::As),
+        _ => Hint::Keep,
+    });
+    format!("type:filter{}{}", sep, keys)
 }

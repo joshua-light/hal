@@ -18,7 +18,8 @@ Keys a keyboard may lack have a second key under IDE: `Ins` for `Ctrl+N`,
 `Backspace` for `Del`, `r` for `F2` and `F5`, `e` for `F2` on an agent's
 setting. Where the Vim column is empty, the key is the same in both.
 
-Text inputs and type-to-filter popups take the same keys in both schemes.
+Text inputs, type-to-filter popups and the pane take the same keys in both
+schemes.
 
 `Cmd` counts as `Ctrl` where the terminal forwards it: `Cmd+P` is `Ctrl+P`.
 
@@ -29,7 +30,7 @@ so `/` and `.` need the English layout.
 
 ## Rebinding keys
 
-Any key in the tables below can change. Add a `[keymap.<place>]` table to
+Every key hal answers to can change, in every tab, popup and text box. Add a `[keymap.<place>]` table to
 `~/.hal/config.toml`, naming the action and its new keys, then restart hal:
 
 ```toml
@@ -53,7 +54,13 @@ copy the line you want and edit it. `hal keys vim` shows the other scheme.
 | `settings` | The settings window |
 | `popup`, `live_tail` | Session info; the transcript |
 | `list_picker` | The agent, respawn and task-kind pickers |
-| `folders` | The folder picker |
+| `folders` | The folder picker, browsing or in bookmarks |
+| `filter_picker` | Type-to-filter popups: model, task link, the folder picker's places list |
+| `session_finder` | The session finder |
+| `text_input` | Every one-line text box: names, tags, notes, filters, typed settings |
+| `confirm_close` | The close-session confirmation |
+| `pane` | The embedded pane: the keys hal keeps, the rest go to the session |
+| `everywhere` | Every view but the pane: `redraw` (`Ctrl+L`) |
 
 Rules:
 
@@ -71,8 +78,10 @@ Rules:
 - A mistyped place, action or key is skipped and named in the status bar at
   startup; `hal keys` lists them all.
 
-Not rebindable: text inputs, type-to-filter popups, the embedded pane,
-`Ctrl+L` and agent hotkeys (`[agents.<id>].hotkey`).
+In a text box or a type-to-filter popup, a key the table does not bind is
+typed. Bind a printable key there and it stops being text.
+
+Agent hotkeys are set where the agent is: `[agents.<id>].hotkey`.
 
 ## Global
 
