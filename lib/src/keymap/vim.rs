@@ -26,7 +26,7 @@ pub(super) static MAPS: Keymaps = Keymaps {
         bind!(s(S::OpenRespawnPicker), [ch('R')], "respawn"),
         bind!(s(S::OpenAgentPicker), [ch('A')], "default agent"),
         bind!(s(S::OpenModelPicker), [ch('N')], "new+model"),
-        bind!(s(S::OpenPlacesPicker), [ch('p')], "new in…"),
+        bind!(s(S::OpenPlacesPicker), [ctrl(ch('p'))], "new in…"),
         bind!(s(S::OpenDetailPopup), [ch('i')], "info"),
         bind!(s(S::AckSelected), [ch('z')], "ack"),
         bind!(s(S::OpenRenameSession), [ch('r')], "rename"),
