@@ -49,7 +49,8 @@ One tab-separated line per agent: name, status (`sleeping`, `ticking`,
 `halted`, `paused`, `disabled` or `broken`), trigger, run count, today's and
 total spend, then the halt reason or spec error. `--json` prints
 `{ok, root, agents: […]}` with the same fields plus `inbox_pending`,
-`last_result` and `notes`.
+`last_result`, `notes` and `resumes_at`: the unix time a halt lifts itself
+(a spent daily budget, a usage limit), or `null` when it waits for `resume`.
 
 ### agent new
 
@@ -102,7 +103,7 @@ hal agent reset NAME
 ```
 
 `pause` makes the supervisor skip the agent. `resume` undoes that and also
-clears a budget or failure halt. Both print `agent`, `paused` and
+clears a halt of any kind. Both print `agent`, `paused` and
 `stopped_reason`. `reset` deletes `state.json` (runs, spend, history) and
 leaves the workdir, notes and inbox alone; it prints `agent`.
 

@@ -101,12 +101,23 @@ async fn agent_loop(dir: PathBuf, tx: mpsc::Sender<TickReport>) {
             }
         };
         let state = reclaim_stale_tick(&dir, &spec).await;
-        if !spec.enabled || state.paused || state.stopped_reason.is_some() {
+        if !spec.enabled || state.paused {
             tokio::time::sleep(PARKED_POLL).await;
             continue;
         }
-        if let Some(reason) = super::budget_block(&spec, &state) {
-            halt(&dir, &spec, &reason, &tx).await;
+        if state.stopped_reason.is_some() {
+            // A daily budget or a usage limit runs out by itself; any other
+            // halt waits for the user. Either way the next pass re-reads
+            // the state, so a budget still spent halts again.
+            if state.halt_is_over(super::now_unix()) {
+                lift_halt(&dir, &spec, &tx).await;
+            } else {
+                tokio::time::sleep(PARKED_POLL).await;
+            }
+            continue;
+        }
+        if let Some(block) = super::budget_block(&spec, &state) {
+            halt(&dir, &spec, block, &tx).await;
             continue;
         }
 
@@ -153,12 +164,28 @@ async fn agent_loop(dir: PathBuf, tx: mpsc::Sender<TickReport>) {
                 continue;
             }
         };
-        trigger::ack(&event, tick.ok);
+        if tick.limited {
+            // The event was never handled: an inbox file goes back in the
+            // queue, and a poll or interval fires again once the halt
+            // lifts, counting output this run already saw.
+            trigger::requeue(&event);
+            pacing.run_now();
+        } else {
+            trigger::ack(&event, tick.ok);
+        }
 
         let status = if tick.ok {
             format!(
                 "{}: tick #{} ok · {} turns · ${:.2}",
                 spec.name, state.ticks, tick.turns, tick.cost_usd
+            )
+        } else if tick.limited {
+            format!(
+                "{}: {}",
+                spec.name,
+                state
+                    .halt_label()
+                    .unwrap_or_else(|| "usage limit reached".into())
             )
         } else {
             format!(
@@ -256,20 +283,54 @@ async fn reclaim_stale_tick(dir: &std::path::Path, spec: &Spec) -> super::AgentS
         .unwrap_or(state)
 }
 
-async fn halt(dir: &std::path::Path, spec: &Spec, reason: &str, tx: &mpsc::Sender<TickReport>) {
+async fn halt(
+    dir: &std::path::Path,
+    spec: &Spec,
+    halt: super::Halt,
+    tx: &mpsc::Sender<TickReport>,
+) {
     let already = super::load_state(dir).stopped_reason.is_some();
     if !already {
-        let _ = super::update_state(dir, |s| s.stopped_reason = Some(reason.to_string()));
-        super::log_event(dir, "error", format!("halted: {}", reason));
+        let waits = halt.until.is_some();
+        let label = super::update_state(dir, |s| s.halt(halt))
+            .ok()
+            .and_then(|s| s.halt_label())
+            .unwrap_or_default();
+        // A halt that lifts itself is a wait, not a fault.
+        let level = if waits { "warn" } else { "error" };
+        super::log_event(dir, level, format!("halted: {}", label));
         let _ = tx
             .send(TickReport {
                 name: spec.name.clone(),
                 ok: false,
-                status: format!("{}: halted — {}", spec.name, reason),
+                status: format!("{}: halted — {}", spec.name, label),
             })
             .await;
     }
     tokio::time::sleep(PARKED_POLL).await;
+}
+
+/// End a halt whose reason ran out. The check repeats under the state lock:
+/// the user may have resumed, or `once` re-halted, since the loop read it.
+async fn lift_halt(dir: &std::path::Path, spec: &Spec, tx: &mpsc::Sender<TickReport>) {
+    let mut lifted = None;
+    let _ = super::update_state(dir, |s| {
+        if s.halt_is_over(super::now_unix()) {
+            lifted = s.stopped_reason.take();
+            s.clear_halt();
+        }
+    });
+    let Some(reason) = lifted else {
+        return;
+    };
+    super::log_event(dir, "info", format!("resumed itself: {} is over", reason));
+    let _ = tx
+        .send(TickReport {
+            name: spec.name.clone(),
+            ok: true,
+            status: format!("{}: resumed — {} is over", spec.name, reason),
+        })
+        .await;
 }
 
 /// Interval/poll pacing. It lives in memory, not state.json: a restart
@@ -453,6 +514,51 @@ mod tests {
         pacing.run_now();
         assert!(pacing.last_poll.is_none(), "a run by hand polls now");
         assert!(pacing.last_digest.is_none(), "and counts what it prints");
+    }
+
+    fn lift(dir: &std::path::Path) -> Option<String> {
+        let spec = watching("board");
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(super::lift_halt(dir, &spec, &tx));
+        rx.try_recv().ok().map(|report| report.status)
+    }
+
+    fn halted(dir: &std::path::Path, reason: &str, until: Option<i64>) {
+        crate::harness::update_state(dir, |s| {
+            s.stopped_reason = Some(reason.into());
+            s.stopped_until = until;
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn a_halt_past_its_deadline_lifts_and_says_so() {
+        let tmp = tempfile::tempdir().unwrap();
+        halted(tmp.path(), "usage limit reached", Some(1));
+
+        let status = lift(tmp.path()).expect("a report for the status bar");
+        assert!(
+            status.contains("resumed — usage limit reached is over"),
+            "{status}"
+        );
+        let state = crate::harness::load_state(tmp.path());
+        assert_eq!((state.stopped_reason, state.stopped_until), (None, None));
+        let log = crate::harness::read_events(tmp.path(), 10);
+        assert_eq!(log[0].text, "resumed itself: usage limit reached is over");
+    }
+
+    #[test]
+    fn a_halt_still_running_or_without_a_deadline_stays() {
+        let tmp = tempfile::tempdir().unwrap();
+        for until in [Some(i64::MAX), None] {
+            halted(tmp.path(), "5 consecutive failed ticks", until);
+            assert_eq!(lift(tmp.path()), None);
+            let state = crate::harness::load_state(tmp.path());
+            assert!(state.stopped_reason.is_some(), "{until:?}");
+        }
     }
 
     #[test]

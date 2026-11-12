@@ -35,6 +35,11 @@ pub struct Tick {
     pub returncode: i32,
     pub stderr: String,
     pub duration_s: u64,
+    /// The account's usage limit rejected the tick. Nothing is wrong with
+    /// the agent: the same run works once the limit resets.
+    pub limited: bool,
+    /// When that limit resets (unix), if the CLI said.
+    pub limit_resets_at: Option<i64>,
 }
 
 impl Tick {
@@ -52,6 +57,14 @@ impl Tick {
     /// 3× running. Such a session can never recover.
     pub fn thrashed(&self) -> bool {
         self.result.contains("Autocompact is thrashing")
+    }
+
+    /// The CLI's usage-limit message, as the result of a failed tick. Covers
+    /// "You've hit your limit · resets 3pm" and the older "Claude usage
+    /// limit reached"; a burst 429 says neither.
+    fn says_usage_limit(&self) -> bool {
+        let text = self.result.to_lowercase();
+        text.contains("hit your limit") || text.contains("usage limit")
     }
 
     /// Budget went to compaction rather than work — the window is too small.
@@ -338,6 +351,10 @@ pub fn parse(raw: &str, returncode: i32, stderr: &str) -> Tick {
         stderr: tail(stderr, 2000),
         ..Default::default()
     };
+    // The newest `rate_limit_event`: whether the account turned the request
+    // away, and when its window resets.
+    let mut rejected = false;
+    let mut resets_at = None;
     for line in raw.lines() {
         let Ok(msg) = serde_json::from_str::<serde_json::Value>(line) else {
             continue;
@@ -351,6 +368,12 @@ pub fn parse(raw: &str, returncode: i32, stderr: &str) -> Tick {
                 }
             }
             (_, "compact_boundary") => tick.compactions += 1,
+            ("rate_limit_event", _) => {
+                let info = msg.get("rate_limit_info");
+                let field = |k: &str| info.and_then(|i| i.get(k));
+                rejected = field("status").and_then(|v| v.as_str()) == Some("rejected");
+                resets_at = field("resetsAt").and_then(|v| v.as_i64());
+            }
             ("assistant", _) => {
                 tick.turns += 1;
                 // The result message's usage sums every request in the tick,
@@ -407,6 +430,13 @@ pub fn parse(raw: &str, returncode: i32, stderr: &str) -> Tick {
             }
             _ => {}
         }
+    }
+    if !tick.ok && (rejected || tick.says_usage_limit()) {
+        tick.limited = true;
+        // An `allowed` event names whichever window the CLI reports on,
+        // not necessarily the one that ran out, so only a rejection's
+        // reset time is trusted.
+        tick.limit_resets_at = resets_at.filter(|_| rejected);
     }
     if tick.subtype.is_none() {
         tick.subtype = Some(
@@ -524,6 +554,46 @@ mod tests {
         assert!(!t.ok);
         assert_eq!(t.subtype.as_deref(), Some("api_error"));
         assert_eq!(t.result, "Not logged in · Please run /login");
+    }
+
+    #[test]
+    fn a_rejected_rate_limit_marks_the_tick_limited_until_its_reset() {
+        let raw = r#"{"type":"system","subtype":"init","session_id":"abc"}
+{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1788468000,"rateLimitType":"five_hour"}}
+{"type":"result","subtype":"success","is_error":true,"total_cost_usd":0,"result":"You've hit your limit · resets 3pm (UTC)"}"#;
+        let t = parse(raw, 1, "");
+        assert!(!t.ok);
+        assert!(t.limited);
+        assert_eq!(t.limit_resets_at, Some(1788468000));
+    }
+
+    #[test]
+    fn a_usage_limit_message_alone_marks_the_tick_limited() {
+        let raw = r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1788468000}}
+{"type":"result","subtype":"success","is_error":true,"total_cost_usd":0,"result":"Claude usage limit reached"}"#;
+        let t = parse(raw, 1, "");
+        assert!(t.limited);
+        assert_eq!(
+            t.limit_resets_at, None,
+            "an allowed window is not the one that ran out"
+        );
+    }
+
+    #[test]
+    fn a_run_that_worked_or_failed_otherwise_is_not_limited() {
+        // Captured from a real tick: every run reports its window.
+        let allowed = r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1788468000,"rateLimitType":"five_hour"}}"#;
+        let ok = format!(
+            "{allowed}\n{}",
+            r#"{"type":"result","subtype":"success","total_cost_usd":0.1,"result":"the usage limit doc is updated"}"#
+        );
+        assert!(!parse(&ok, 0, "").limited);
+
+        let failed = format!(
+            "{allowed}\n{}",
+            r#"{"type":"result","subtype":"error_max_turns","total_cost_usd":0.5,"errors":["hit max turns"]}"#
+        );
+        assert!(!parse(&failed, 0, "").limited);
     }
 
     #[test]

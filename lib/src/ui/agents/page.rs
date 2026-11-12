@@ -134,7 +134,15 @@ fn headline(agent: &AgentSnapshot, now: i64, width: usize) -> Vec<Line<'static>>
         }
         AgentStatus::Halted => {
             let reason = agent.state.stopped_reason.clone().unwrap_or_default();
-            lines.push(lead(format!("Halted: {} — space resumes it", reason)));
+            lines.push(lead(match agent.state.resumes_at() {
+                Some(t) if t > now => format!(
+                    "Halted: {} — resumes itself in {}, or space now",
+                    reason,
+                    age(t, now)
+                ),
+                Some(_) => format!("Halted: {} — resuming", reason),
+                None => format!("Halted: {} — space resumes it", reason),
+            }));
         }
         AgentStatus::Disabled => lines.push(lead("Off — space turns it on".into())),
         AgentStatus::Paused => lines.push(lead("Paused — space resumes it".into())),
@@ -349,6 +357,22 @@ mod tests {
         // inbox file name, to find it under inbox/failed/.
         assert!(out.contains("5m ago   poke"), "{out}");
         assert!(out.contains("event 20260903T191749.728Z-poke"), "{out}");
+    }
+
+    #[test]
+    fn a_halt_says_whether_it_lifts_itself() {
+        let mut state = ticked(true);
+        state.stopped_reason = Some("usage limit reached".into());
+        state.stopped_until = Some(NOW + 2 * 3600);
+        let out = render_detail(snap("bb-prs", state.clone()), Detail::default(), 120, 36);
+        assert!(
+            out.contains("Halted: usage limit reached — resumes itself in 2h, or space now"),
+            "{out}"
+        );
+
+        state.stopped_until = None;
+        let out = render_detail(snap("bb-prs", state), Detail::default(), 120, 36);
+        assert!(out.contains("— space resumes it"), "{out}");
     }
 
     #[test]

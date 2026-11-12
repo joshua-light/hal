@@ -54,8 +54,8 @@ pub use snapshot::{agent_dirs, scan, snapshot, AgentSessions, AgentSnapshot, Age
 pub use spec::Spec;
 use state::today_utc;
 pub use state::{
-    load_state, now_unix, reset, set_paused, state_path, update_state, AgentState, TickRecord,
-    Ticking,
+    load_state, now_unix, reset, set_paused, state_path, update_state, AgentState, Halt,
+    TickRecord, Ticking,
 };
 pub(crate) use tick::truncate;
 pub use tick::{budget_block, tick_once, MAX_FAILURES_IN_A_ROW, MAX_HISTORY};

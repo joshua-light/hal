@@ -126,12 +126,9 @@ impl HarnessView {
         *cursor = (*cursor as isize + delta).clamp(0, max) as usize;
     }
 
-    /// Persistent agents that need the user: halted or broken.
+    /// Persistent agents that need the user: halted for good or broken.
     pub fn attention_count(&self) -> usize {
-        self.agents
-            .iter()
-            .filter(|a| a.status().needs_attention())
-            .count()
+        self.agents.iter().filter(|a| a.needs_attention()).count()
     }
 }
 

@@ -39,9 +39,13 @@ pub struct AgentState {
     pub compactions: u64,
     pub cost_usd: f64,
     pub failures_in_a_row: u32,
-    /// Set when the loop halted itself (budget, failures). Cleared by
-    /// `resume` / `reset`.
+    /// Set when the loop halted itself (budget, usage limit, failures).
+    /// Cleared by `resume` / `reset`, or by the supervisor at
+    /// `stopped_until`.
     pub stopped_reason: Option<String>,
+    /// When the halt lifts itself (unix): a daily budget at the next UTC
+    /// midnight, a usage limit at its reset. `None` waits for `resume`.
+    pub stopped_until: Option<i64>,
     /// User-requested pause. The supervisor skips a paused agent.
     pub paused: bool,
     pub last_tick_at: Option<i64>,
@@ -73,7 +77,65 @@ pub fn now_unix() -> i64 {
     chrono::Utc::now().timestamp()
 }
 
+/// The first second of the UTC day after `now`: when daily spend rolls over.
+pub(super) fn next_utc_midnight(now: i64) -> i64 {
+    const DAY_S: i64 = 86_400;
+    (now.div_euclid(DAY_S) + 1) * DAY_S
+}
+
+/// `at` on the local wall clock, with the weekday when that isn't today.
+fn local_clock(at: i64, now: i64) -> String {
+    use chrono::{Local, TimeZone};
+    let local = |t| Local.timestamp_opt(t, 0).single();
+    match (local(at), local(now)) {
+        (Some(at), Some(now)) if at.date_naive() == now.date_naive() => {
+            at.format("%H:%M").to_string()
+        }
+        (Some(at), _) => at.format("%a %H:%M").to_string(),
+        _ => "later".into(),
+    }
+}
+
+/// Why the loop must stop, and when that stops being true by itself.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Halt {
+    pub reason: String,
+    /// See [`AgentState::stopped_until`].
+    pub until: Option<i64>,
+}
+
 impl AgentState {
+    pub(super) fn halt(&mut self, halt: Halt) {
+        self.stopped_reason = Some(halt.reason);
+        self.stopped_until = halt.until;
+    }
+
+    pub(super) fn clear_halt(&mut self) {
+        self.stopped_reason = None;
+        self.stopped_until = None;
+    }
+
+    /// True for a halt whose reason has run out: the day rolled over, the
+    /// usage limit reset.
+    pub fn halt_is_over(&self, now: i64) -> bool {
+        self.stopped_reason.is_some() && self.stopped_until.is_some_and(|t| now >= t)
+    }
+
+    /// When the current halt lifts itself, if it does.
+    pub fn resumes_at(&self) -> Option<i64> {
+        self.stopped_reason.as_ref().and(self.stopped_until)
+    }
+
+    /// The halt in one line, for the log and the status bar: its reason,
+    /// and when it lifts itself if it does.
+    pub fn halt_label(&self) -> Option<String> {
+        let reason = self.stopped_reason.as_ref()?;
+        Some(match self.stopped_until {
+            Some(t) => format!("{} · resumes itself {}", reason, local_clock(t, now_unix())),
+            None => reason.clone(),
+        })
+    }
+
     pub(super) fn roll_day(&mut self) {
         let t = today_utc();
         if self.today != t {
@@ -137,7 +199,7 @@ pub fn set_paused(dir: &Path, paused: bool) -> io::Result<AgentState> {
         s.paused = paused;
         if !paused {
             // Resume also clears a halt so the user has one verb for "go".
-            s.stopped_reason = None;
+            s.clear_halt();
             s.failures_in_a_row = 0;
         }
     })
@@ -165,5 +227,49 @@ mod tests {
         assert_eq!(load_state(tmp.path()), s);
         let s2 = set_paused(tmp.path(), false).unwrap();
         assert!(!s2.paused);
+    }
+
+    #[test]
+    fn a_halt_is_over_only_past_its_own_deadline() {
+        let mut s = AgentState::default();
+        assert!(!s.halt_is_over(100), "not halted");
+
+        s.halt(Halt {
+            reason: "5 consecutive failed ticks".into(),
+            until: None,
+        });
+        assert!(!s.halt_is_over(i64::MAX), "waits for resume");
+        assert_eq!(s.resumes_at(), None);
+
+        s.halt(Halt {
+            reason: "usage limit reached".into(),
+            until: Some(100),
+        });
+        assert!(!s.halt_is_over(99));
+        assert!(s.halt_is_over(100));
+        assert_eq!(s.resumes_at(), Some(100));
+    }
+
+    #[test]
+    fn resume_clears_the_deadline_with_the_halt() {
+        let tmp = tempfile::tempdir().unwrap();
+        update_state(tmp.path(), |s| {
+            s.halt(Halt {
+                reason: "daily budget $1 reached".into(),
+                until: Some(100),
+            })
+        })
+        .unwrap();
+        let s = set_paused(tmp.path(), false).unwrap();
+        assert_eq!((s.stopped_reason, s.stopped_until), (None, None));
+    }
+
+    #[test]
+    fn the_day_rolls_at_utc_midnight() {
+        // 2026-11-12T00:00:00Z
+        const MIDNIGHT: i64 = 1_794_441_600;
+        assert_eq!(next_utc_midnight(MIDNIGHT - 1), MIDNIGHT);
+        assert_eq!(next_utc_midnight(MIDNIGHT), MIDNIGHT + 86_400);
+        assert_eq!(next_utc_midnight(MIDNIGHT + 5), MIDNIGHT + 86_400);
     }
 }

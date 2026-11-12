@@ -194,7 +194,7 @@ Usage:
                                               Drop an event into the inbox; without one, run now
                                               the way the trigger would (a poll agent polls)
   hal agent pause <name>                   Skip this agent until resumed
-  hal agent resume <name>                  Resume; also clears a budget/failure halt
+  hal agent resume <name>                  Resume; also clears a halt
   hal agent reset <name>                   Clear ticks/spend bookkeeping (workdir untouched)
   hal agent show <name>                    Full state as JSON (history, notes)
 

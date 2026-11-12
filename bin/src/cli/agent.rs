@@ -125,6 +125,7 @@ fn snapshot_json(a: &AgentSnapshot) -> serde_json::Value {
         "enabled": a.spec.as_ref().map(|s| s.enabled).unwrap_or(false),
         "paused": st.paused,
         "stopped_reason": st.stopped_reason,
+        "resumes_at": st.resumes_at(),
         "ticks": st.ticks,
         "cost_usd": st.cost_usd,
         "today_cost_usd": st.today_cost(),
@@ -233,7 +234,7 @@ fn once(args: &[String]) -> Result<(), CliError> {
     if !a.flag("force") {
         if let Some(block) = harness::budget_block(&spec, &state) {
             return Err(CliError::Conflict {
-                msg: format!("{}: {}", name, block),
+                msg: format!("{}: {}", name, block.reason),
                 recipe: Some(
                     "pass --force to run anyway, or raise the budget in agent.toml".into(),
                 ),

@@ -131,6 +131,15 @@ dot and name; the selected agent's page shows:
 - **Settings**: model, effort, interval, budgets and more. Edits keep
   `agent.toml`'s comments, are validated, and apply on the next run.
 
+An agent halts itself for four reasons, and two of them end by themselves:
+
+- **Daily budget spent**: resumes at the next UTC midnight.
+- **Account usage limit reached**: resumes when the limit resets. The event
+  that hit the limit stays queued and runs first.
+- **Total budget spent**, or **five failed runs in a row**: waits for you.
+
+`Space` or `hal agent resume` ends any halt at once.
+
 A run has no terminal, so it never shows on the Sessions tab. `Ctrl+N` (`n` in the Vim scheme) opens an
 interactive session in the agent's folder, primed with why it last failed.
 Commands and the folder layout: `hal help agent` and

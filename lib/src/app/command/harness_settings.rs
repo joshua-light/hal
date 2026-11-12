@@ -129,6 +129,7 @@ impl App {
             if on {
                 a.state.paused = false;
                 a.state.stopped_reason = None;
+                a.state.stopped_until = None;
                 a.state.failures_in_a_row = 0;
             }
         }

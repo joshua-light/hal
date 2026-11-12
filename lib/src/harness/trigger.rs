@@ -126,6 +126,20 @@ pub fn ack(event: &Event, ok: bool) {
     let _ = fs::rename(work, dest);
 }
 
+/// Put a claimed event back in the queue under its own name, for a run that
+/// never got to handle it. The rename keeps the mtime, so it is still the
+/// oldest and runs first.
+pub fn requeue(event: &Event) {
+    let Some(work) = &event.processing else {
+        return;
+    };
+    let (Some(inbox), Some(name)) = (work.parent().and_then(|p| p.parent()), work.file_name())
+    else {
+        return;
+    };
+    let _ = fs::rename(work, inbox.join(name));
+}
+
 /// Drop a payload into the inbox. Returns the event id (the file name).
 pub fn drop_event(inbox: &Path, label: &str, payload: &str) -> io::Result<String> {
     ensure_inbox(inbox)?;
@@ -266,6 +280,20 @@ mod tests {
             .collect();
         assert_eq!(failed.len(), 1);
         assert!(failed[0].file_name().to_string_lossy().ends_with(&id));
+    }
+
+    #[test]
+    fn a_requeued_event_is_taken_again_under_its_own_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        let inbox = tmp.path().join("inbox");
+        let id = drop_event(&inbox, "poke", "hello").unwrap();
+        let ev = take(&inbox).unwrap().unwrap();
+        assert_eq!(pending_count(&inbox), 0);
+
+        requeue(&ev);
+        assert_eq!(pending_count(&inbox), 1);
+        let again = take(&inbox).unwrap().unwrap();
+        assert_eq!((again.id, again.payload), (id, "hello".to_string()));
     }
 
     #[test]

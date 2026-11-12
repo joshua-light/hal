@@ -11,7 +11,8 @@ pub enum AgentStatus {
     Ticking,
     /// Waiting on its trigger. The normal state; costs nothing.
     Sleeping,
-    /// Halted itself: budget or repeated failures. Needs you.
+    /// Halted itself: budget, usage limit or repeated failures. Needs you
+    /// unless the halt lifts itself ([`AgentState::resumes_at`]).
     Halted,
     Paused,
     /// `enabled = false` in the spec.
@@ -30,10 +31,6 @@ impl AgentStatus {
             AgentStatus::Disabled => "disabled",
             AgentStatus::Broken => "broken",
         }
-    }
-
-    pub fn needs_attention(self) -> bool {
-        matches!(self, AgentStatus::Halted | AgentStatus::Broken)
     }
 }
 
@@ -64,6 +61,15 @@ impl AgentSnapshot {
             AgentStatus::Halted
         } else {
             AgentStatus::Sleeping
+        }
+    }
+
+    /// Halted for good or broken: nothing happens until you act. A halt
+    /// that lifts itself only asks for patience.
+    pub fn needs_attention(&self) -> bool {
+        match self.status() {
+            AgentStatus::Halted => self.state.resumes_at().is_none(),
+            status => status == AgentStatus::Broken,
         }
     }
 
@@ -380,6 +386,10 @@ mod tests {
         assert_eq!(snapshot(&dir).status(), AgentStatus::Sleeping);
         update_state(&dir, |s| s.stopped_reason = Some("budget".into())).unwrap();
         assert_eq!(snapshot(&dir).status(), AgentStatus::Halted);
+        assert!(snapshot(&dir).needs_attention(), "halted for good");
+        update_state(&dir, |s| s.stopped_until = Some(i64::MAX)).unwrap();
+        assert_eq!(snapshot(&dir).status(), AgentStatus::Halted);
+        assert!(!snapshot(&dir).needs_attention(), "it resumes itself");
         update_state(&dir, |s| s.paused = true).unwrap();
         assert_eq!(snapshot(&dir).status(), AgentStatus::Paused);
         fs::write(dir.join(spec::SPEC_FILE), "nonsense = [").unwrap();
