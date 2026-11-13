@@ -15,6 +15,31 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::SystemTime;
 
+/// Every Pi transcript on disk. Pi files them one level down, under a
+/// directory per project (`sessions/--home-me-proj--/<ts>_<id>.jsonl`), so
+/// the sessions root itself holds none.
+pub fn transcripts() -> Vec<PathBuf> {
+    let Some(root) = paths::pi_sessions_dir() else {
+        return Vec::new();
+    };
+    let Ok(project_dirs) = std::fs::read_dir(&root) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for proj in project_dirs.flatten() {
+        let Ok(files) = std::fs::read_dir(proj.path()) else {
+            continue;
+        };
+        out.extend(
+            files
+                .flatten()
+                .map(|f| f.path())
+                .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("jsonl")),
+        );
+    }
+    out
+}
+
 fn build_session_info(
     agent_id: String,
     pid: u32,
@@ -190,32 +215,18 @@ fn scan_external_live_sessions(
     };
     let tmux_panes = send::tmux_panes();
     let mut by_cwd: HashMap<String, Vec<(PathBuf, SystemTime)>> = HashMap::new();
-    let Some(root) = paths::pi_sessions_dir() else {
-        return Vec::new();
-    };
-    let Ok(project_dirs) = std::fs::read_dir(&root) else {
-        return Vec::new();
-    };
-    for proj in project_dirs.flatten() {
-        let Ok(files) = std::fs::read_dir(proj.path()) else {
+    for path in transcripts() {
+        if claimed_paths.contains(&path) {
+            continue;
+        }
+        let head = conversation::read_jsonl_head(&path, 4096);
+        let Some(cwd) = conversation::extract_cwd(&head) else {
             continue;
         };
-        for file in files.flatten() {
-            let path = file.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("jsonl")
-                || claimed_paths.contains(&path)
-            {
-                continue;
-            }
-            let head = conversation::read_jsonl_head(&path, 4096);
-            let Some(cwd) = conversation::extract_cwd(&head) else {
-                continue;
-            };
-            let Some(mtime) = path.metadata().ok().and_then(|m| m.modified().ok()) else {
-                continue;
-            };
-            by_cwd.entry(cwd).or_default().push((path, mtime));
-        }
+        let Some(mtime) = path.metadata().ok().and_then(|m| m.modified().ok()) else {
+            continue;
+        };
+        by_cwd.entry(cwd).or_default().push((path, mtime));
     }
     for files in by_cwd.values_mut() {
         files.sort_by_key(|b| std::cmp::Reverse(b.1));

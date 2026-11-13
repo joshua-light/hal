@@ -79,6 +79,7 @@ pub(super) fn parse_pi_session_file(path: &Path) -> Option<ParsedSession> {
                             // Pi sessions carry no requestId/message.id, so
                             // cross-file dedup can't apply.
                             dedup_key: String::new(),
+                            folded: false,
                         };
                         if let Some(content) = msg.get("content").and_then(|c| c.as_array()) {
                             for block in content {

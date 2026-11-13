@@ -34,8 +34,8 @@ pub(super) fn apply_state_hint(parsed: SessionState, hint: SessionState) -> Sess
 }
 
 /// The transcripts in `files` not in `claimed` and modified within
-/// `window_secs`, newest first. A file whose mtime can't be aged (`elapsed`
-/// fails when it is ahead of the clock) is skipped.
+/// `window_secs`, newest first. A live transcript's mtime can lead the wall
+/// clock, so a future mtime counts as age 0, as in the Codex scan.
 pub(super) fn recent_unclaimed(
     files: &[FileEntry],
     claimed: &HashSet<PathBuf>,
@@ -46,9 +46,7 @@ pub(super) fn recent_unclaimed(
         if claimed.contains(path) {
             continue;
         }
-        let Some(age) = mtime.elapsed().ok().map(|d| d.as_secs()) else {
-            continue;
-        };
+        let age = mtime.elapsed().map_or(0, |d| d.as_secs());
         if age > window_secs {
             continue;
         }
@@ -59,4 +57,23 @@ pub(super) fn recent_unclaimed(
         .into_iter()
         .map(|(path, _)| path.clone())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, SystemTime};
+
+    #[test]
+    fn a_future_mtime_counts_as_fresh() {
+        let now = SystemTime::now();
+        let future = PathBuf::from("future.jsonl");
+        let old = PathBuf::from("old.jsonl");
+        let files = vec![
+            (old.clone(), now - Duration::from_secs(7_200)),
+            (future.clone(), now + Duration::from_secs(60)),
+        ];
+        let got = recent_unclaimed(&files, &HashSet::new(), 3_600);
+        assert_eq!(got, vec![future]);
+    }
 }

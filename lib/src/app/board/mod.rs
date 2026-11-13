@@ -147,16 +147,9 @@ pub struct TasksView {
 
 impl TasksView {
     pub(crate) fn new() -> Self {
-        let (board, persistence_error) = match PersonalBoard::load_result() {
-            Ok(board) => (board, None),
-            Err(e) => (
-                PersonalBoard::default(),
-                Some(format!("task board load failed: {e}")),
-            ),
-        };
         Self {
-            board,
-            persistence_error,
+            board: PersonalBoard::default(),
+            persistence_error: None,
             col: 0,
             row: 0,
             input: String::new(),
@@ -187,6 +180,15 @@ impl TasksView {
             || t.tags
                 .iter()
                 .any(|tag| fuzzy_match(&self.filter, &format!("#{}", tag)).is_some())
+    }
+
+    /// The board earlier runs left on disk, read once at startup. A store
+    /// that fails to load leaves the board empty and says why.
+    pub(crate) fn load(&mut self) {
+        match PersonalBoard::load_result() {
+            Ok(board) => self.board = board,
+            Err(e) => self.persistence_error = Some(format!("task board load failed: {e}")),
+        }
     }
 
     /// Reload the board from disk (picks up hand edits / other instances),
@@ -280,6 +282,21 @@ impl TasksView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn a_new_app_reads_nothing_from_disk_until_told_to() {
+        crate::test_util::with_temp_home(|| {
+            let mut board = PersonalBoard::load_result().unwrap();
+            board.add("left by an earlier run").unwrap().unwrap();
+
+            let mut app = crate::app::App::new();
+            assert!(app.tasks.board.tasks().is_empty());
+
+            app.load_persisted();
+            assert_eq!(app.tasks.board.tasks().len(), 1);
+        });
+    }
 
     #[test]
     fn planning_shown_keeps_every_column() {

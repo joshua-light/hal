@@ -33,8 +33,9 @@ pub(crate) fn agent_subcommand(args: &[String]) -> Result<(), CliError> {
     }
 }
 
-/// `--key value` pairs plus bare positionals. `--flag` with no value (or
-/// followed by another `--`) is a boolean.
+/// `--key value` pairs plus bare positionals. A flag in
+/// [`BOOL_FLAGS`](super::flags::BOOL_FLAGS), at the end, or followed by
+/// another `--` is a boolean.
 struct Args {
     kv: BTreeMap<String, String>,
     positional: Vec<String>,
@@ -53,7 +54,10 @@ fn parse(args: &[String]) -> Args {
             };
             let value = match inline {
                 Some(v) => v,
-                None if i + 1 < args.len() && !args[i + 1].starts_with("--") => {
+                None if !super::flags::BOOL_FLAGS.contains(&a.as_str())
+                    && i + 1 < args.len()
+                    && !args[i + 1].starts_with("--") =>
+                {
                     i += 1;
                     args[i].clone()
                 }
@@ -383,6 +387,13 @@ mod tests {
         assert_eq!(a.get("event"), Some("hi there"));
         assert!(a.flag("json"));
         assert_eq!(a.get("level"), Some("warn"));
+    }
+
+    #[test]
+    fn a_boolean_flag_leaves_the_next_token_alone() {
+        let a = parse(&argv(&["--force", "bb-prs"]));
+        assert_eq!(a.positional, vec!["bb-prs"]);
+        assert!(a.flag("force"));
     }
 
     #[test]

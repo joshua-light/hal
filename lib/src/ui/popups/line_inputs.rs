@@ -1,6 +1,6 @@
 //! Single-line editors: task attachment and task tags.
 
-use super::widgets::{key_footer, render_line_input, wrapped_rows};
+use super::widgets::{input_line, input_rows, key_footer, render_line_input};
 use crate::app::App;
 use crate::ui::common::{centered_fixed, CURSOR};
 use ratatui::layout::Rect;
@@ -15,13 +15,19 @@ use ratatui::Frame;
 /// flips to file-path/URL mode and back, keeping the buffer.
 pub(crate) fn render_task_attach_input(frame: &mut Frame, area: Rect, app: &App) {
     let note_mode = app.tasks.attach_note;
-    let mut input_line = app.tasks.input.clone();
-    input_line.push(CURSOR);
+    let mut text = app.tasks.input.clone();
+    text.push(CURSOR);
+    let prefix = Span::styled(
+        if note_mode { "  ✎ " } else { "  📎 " },
+        Style::default().fg(Color::Green),
+    );
+    let input = input_line(prefix, text, Color::White);
 
     let desired_w = 70u16.min(area.width);
-    let wrap_width = desired_w.saturating_sub(6) as usize;
-    let input_rows = wrapped_rows(&input_line, wrap_width);
-    let desired_h = 5u16.saturating_add(input_rows).max(9).min(area.height);
+    let desired_h = 5u16
+        .saturating_add(input_rows(&input, desired_w))
+        .max(9)
+        .min(area.height);
     let popup = centered_fixed(area, desired_w, desired_h);
 
     let (title, hint) = if note_mode {
@@ -37,11 +43,7 @@ pub(crate) fn render_task_attach_input(frame: &mut Frame, area: Rect, app: &App)
         popup,
         title,
         hint,
-        Span::styled(
-            if note_mode { "  ✎ " } else { "  📎 " },
-            Style::default().fg(Color::Green),
-        ),
-        input_line,
+        input,
         key_footer("attach", Some(if note_mode { "file/URL" } else { "note" })),
     );
 }
@@ -50,13 +52,16 @@ pub(crate) fn render_task_attach_input(frame: &mut Frame, area: Rect, app: &App)
 /// task input popup: the buffer is prefilled with the current tags, typing
 /// edits the whole set (space/comma separated), enter saves, esc cancels.
 pub(crate) fn render_task_tags(frame: &mut Frame, area: Rect, app: &App) {
-    let mut input_line = app.tasks.input.clone();
-    input_line.push(CURSOR);
+    let mut text = app.tasks.input.clone();
+    text.push(CURSOR);
+    let prefix = Span::styled("  # ", Style::default().fg(Color::Cyan));
+    let input = input_line(prefix, text, Color::White);
 
     let desired_w = 70u16.min(area.width);
-    let wrap_width = desired_w.saturating_sub(6) as usize;
-    let input_rows = wrapped_rows(&input_line, wrap_width);
-    let desired_h = 5u16.saturating_add(input_rows).max(9).min(area.height);
+    let desired_h = 5u16
+        .saturating_add(input_rows(&input, desired_w))
+        .max(9)
+        .min(area.height);
     let popup = centered_fixed(area, desired_w, desired_h);
 
     render_line_input(
@@ -64,8 +69,7 @@ pub(crate) fn render_task_tags(frame: &mut Frame, area: Rect, app: &App) {
         popup,
         " Edit tags ",
         " space or comma separates tags ",
-        Span::styled("  # ", Style::default().fg(Color::Cyan)),
-        input_line,
+        input,
         key_footer("save", None),
     );
 }

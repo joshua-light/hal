@@ -1,6 +1,6 @@
 //! The add/rename-task popup and its context box.
 
-use super::widgets::{key_footer, wrapped_rows};
+use super::widgets::{input_line, input_rows, key_footer};
 use crate::app::{App, TaskField};
 use crate::ui::common::{centered_fixed, popup_block, CURSOR};
 use crate::ui::palette::{accent_fg, DIM_TEXT};
@@ -19,26 +19,35 @@ pub(crate) fn render_task_input(frame: &mut Frame, area: Rect, app: &App) {
     let on_context = !renaming && app.tasks.field == TaskField::Context;
 
     let desired_w = 70u16.min(area.width);
-    // Borders (2) plus the "  + " prefix (4) leave this much for the text, so
-    // the height estimate matches what the wrapped Paragraph will occupy.
-    let wrap_width = desired_w.saturating_sub(6) as usize;
-    let mut input_line = app.tasks.input.clone();
+    let mut text = app.tasks.input.clone();
     if !on_context {
-        input_line.push(CURSOR);
+        text.push(CURSOR);
     }
-    let input_rows = wrapped_rows(&input_line, wrap_width);
+    let input = input_line(
+        Span::styled("  + ", Style::default().fg(Color::Green)),
+        text,
+        if on_context {
+            Color::Gray
+        } else {
+            Color::White
+        },
+    );
+    let task_rows = input_rows(&input, desired_w);
+    // Context rows sit inside the borders (2) behind a "  " indent, with two
+    // columns to spare; `context_lines` cuts them to this width.
+    let wrap_width = desired_w.saturating_sub(6) as usize;
 
     // Everything the popup holds besides the context body: borders, the
     // blank line above the task line, the task line, the blank + header
     // above the body, the blank + footer below it. The body takes the rows
     // the screen has left, so the popup grows with the text instead of
     // clipping it.
-    let fixed_rows = 7u16.saturating_add(input_rows);
+    let fixed_rows = 7u16.saturating_add(task_rows);
     let context_budget = area.height.saturating_sub(fixed_rows).max(1) as usize;
     let context_body = context_lines(&app.tasks.context, on_context, wrap_width, context_budget);
 
     let desired_h = if renaming {
-        5u16.saturating_add(input_rows)
+        5u16.saturating_add(task_rows)
     } else {
         fixed_rows.saturating_add(context_body.len() as u16)
     }
@@ -81,22 +90,7 @@ pub(crate) fn render_task_input(frame: &mut Frame, area: Rect, app: &App) {
         key_footer("add", Some(if on_context { "task" } else { "context" }))
     };
 
-    let mut lines = vec![
-        Line::raw(""),
-        Line::from(vec![
-            Span::styled("  + ", Style::default().fg(Color::Green)),
-            Span::styled(
-                input_line,
-                Style::default()
-                    .fg(if on_context {
-                        Color::Gray
-                    } else {
-                        Color::White
-                    })
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-    ];
+    let mut lines = vec![Line::raw(""), input];
     if !renaming {
         lines.push(Line::raw(""));
         lines.push(Line::from(Span::styled(
@@ -240,6 +234,22 @@ mod task_input_tests {
                     rendered
                 );
             }
+        });
+    }
+
+    #[test]
+    fn wide_char_input_keeps_the_footer() {
+        with_temp_home(|| {
+            let mut app = App::new();
+            let id = app.tasks.board.add("plain").unwrap().unwrap();
+            app.focus_task(&id);
+            assert!(app.enter_task_rename());
+            // 200 CJK chars fill 400 columns: six rows, where a char count
+            // estimates four and the footer falls off the bottom.
+            app.tasks.input = "漢字".repeat(100);
+
+            let rendered = render(&app);
+            assert!(rendered.contains("[esc]"), "footer stays:\n{}", rendered);
         });
     }
 

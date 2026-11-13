@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use super::chore::chore_kind;
+use crate::agent::AgentConfig;
 use crate::bookmarks::Bookmarks;
 use crate::link::{Chore, Link, ReviewLink, TaskLink};
 use crate::ops::OpError;
@@ -17,17 +18,21 @@ pub struct LinkTarget {
     pub title: String,
     pub prompt: String,
     pub agent_id: String,
+    /// What resolving read on the way: the agent behind `agent_id`, and a
+    /// task link's card. [`open`](super::open) acts on these same values
+    /// rather than reading them again, so a card or registry edited in
+    /// between cannot make it act on something the checks never saw.
+    pub(super) agent: AgentConfig,
+    pub(super) card: Option<TaskState>,
 }
 
 /// The live session a hand-over for `task` would replace, if any.
 pub fn session_to_supersede(task: &TaskLink) -> Result<Option<String>, OpError> {
     let target = self::target(&Link::Task(task.clone()), None)?;
-    let card = board_card(task.id.as_str())?;
-    Ok(live_session_in(
-        &card,
-        &target.cwd,
-        send::tmux_session_exists,
-    ))
+    Ok(target
+        .card
+        .as_ref()
+        .and_then(|card| live_session_in(card, &target.cwd, send::tmux_session_exists)))
 }
 
 /// Resolve `link` to its [`LinkTarget`] without spawning anything.
@@ -35,14 +40,14 @@ pub fn target(link: &Link, agent: Option<&str>) -> Result<LinkTarget, OpError> {
     let agent_id = agent
         .map(str::to_string)
         .unwrap_or_else(|| config::get().default_session_agent_id());
-    config::get()
+    let agent = config::get()
         .agent(&agent_id)
         .ok_or_else(|| OpError::Usage(format!("unknown agent id: {}", agent_id)))?;
 
     match link {
-        Link::Review(review) => review_target(review, agent_id),
-        Link::Fix(fix) => chore_target(fix, agent_id),
-        Link::MergeTarget(merge) => chore_target(merge, agent_id),
+        Link::Review(review) => review_target(review, agent),
+        Link::Fix(fix) => chore_target(fix, agent),
+        Link::MergeTarget(merge) => chore_target(merge, agent),
         Link::Task(task) => {
             let card = board_card(task.id.as_str())?;
             let cwd = task
@@ -71,6 +76,8 @@ pub fn target(link: &Link, agent: Option<&str>) -> Result<LinkTarget, OpError> {
                 title: card.session_title(),
                 prompt: task.prompt(&card.prompt),
                 agent_id,
+                agent,
+                card: Some(card),
             })
         }
     }
@@ -81,7 +88,7 @@ pub fn target(link: &Link, agent: Option<&str>) -> Result<LinkTarget, OpError> {
 /// reviewable without a working tree — the diff, the files and the comments
 /// all come from the server — so a repository nobody has cloned here is
 /// reviewed from the pull request alone, and the prompt says so.
-fn review_target(review: &ReviewLink, agent_id: String) -> Result<LinkTarget, OpError> {
+fn review_target(review: &ReviewLink, agent: AgentConfig) -> Result<LinkTarget, OpError> {
     let checkout = folder_named(review.pr.repo());
     let prompt = match checkout {
         Some(_) => review.prompt(),
@@ -94,14 +101,16 @@ fn review_target(review: &ReviewLink, agent_id: String) -> Result<LinkTarget, Op
         cwd,
         title: review.session_title(),
         prompt,
-        agent_id,
+        agent_id: agent.id.clone(),
+        agent,
+        card: None,
     })
 }
 
 /// Where a chore lands: the local checkout of the repository the URL names,
 /// found among the folders the hub knows. Unlike a review, a chore writes,
 /// commits and pushes, so without a working tree there is nothing to do.
-fn chore_target(chore: &dyn Chore, agent_id: String) -> Result<LinkTarget, OpError> {
+fn chore_target(chore: &dyn Chore, agent: AgentConfig) -> Result<LinkTarget, OpError> {
     chore_kind(chore)?;
     let repo = chore.pr().repo();
     let cwd = folder_named(repo).ok_or_else(|| {
@@ -114,7 +123,9 @@ fn chore_target(chore: &dyn Chore, agent_id: String) -> Result<LinkTarget, OpErr
         cwd,
         title: chore.session_title(),
         prompt: chore.prompt(),
-        agent_id,
+        agent_id: agent.id.clone(),
+        agent,
+        card: None,
     })
 }
 

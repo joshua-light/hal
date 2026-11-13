@@ -253,7 +253,7 @@ impl App {
                 }
             },
             TaskLinkAction::Link { task_id, title } => {
-                let link = crate::tasks::session_links::TaskLink {
+                let link = crate::tasks::session_links::SessionTaskLink {
                     task_id,
                     title: title.clone(),
                 };

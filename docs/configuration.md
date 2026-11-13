@@ -8,9 +8,12 @@ layout keys and `[theme]` in place: each change rewrites the file, keeping
 its comments, and shows at once. It refuses to write while the file does not
 load.
 
-Unknown keys are rejected. A read or parse error, including one unknown key,
-makes hal ignore the whole file and use the defaults. The only signal is a
-`config: parse error … — using defaults` warning in the log.
+Unknown keys are rejected one at a time. hal leaves out the key at fault (a
+mistyped `[ui]` key, a broken `[agents.<id>]` entry, a misspelt section) and
+loads the rest of the file. It names what it left out in the status bar at
+startup, on stderr after a CLI verb, and in the log. A file that cannot be
+read or is not valid TOML is ignored whole, with the same notice, and the
+defaults apply.
 
 The resource broker has its own file, `~/.hal/resources.toml`; see
 [resource-management.md](resource-management.md).

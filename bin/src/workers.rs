@@ -8,6 +8,12 @@ use std::io;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
+/// Send `msg` to the event loop. False once its receiver is gone: the TUI
+/// has exited, so a polling worker should stop instead of scanning on.
+async fn publish(tx: &mpsc::Sender<ScanMsg>, msg: ScanMsg) -> bool {
+    tx.send(msg).await.is_ok()
+}
+
 /// Poll subscription usage and recent-session counts.
 pub(crate) fn spawn_usage(usage_tx: mpsc::Sender<ScanMsg>) {
     tokio::spawn(async move {
@@ -19,9 +25,13 @@ pub(crate) fn spawn_usage(usage_tx: mpsc::Sender<ScanMsg>) {
             })
             .await
             .unwrap_or((None, count::SessionCounts::default()));
-            let _ = usage_tx.send(ScanMsg::SessionCounts(counts)).await;
+            if !publish(&usage_tx, ScanMsg::SessionCounts(counts)).await {
+                break;
+            }
             if let Some(u) = usage_opt {
-                let _ = usage_tx.send(ScanMsg::Usage(u)).await;
+                if !publish(&usage_tx, ScanMsg::Usage(u)).await {
+                    break;
+                }
             }
         }
     });
@@ -46,7 +56,9 @@ pub(crate) fn spawn_harness(harness_tx: mpsc::Sender<ScanMsg>) -> bool {
                 report = tick_rx.recv() => {
                     match report {
                         Some(r) => {
-                            let _ = harness_tx.send(ScanMsg::HarnessTick(r)).await;
+                            if !publish(&harness_tx, ScanMsg::HarnessTick(r)).await {
+                                break;
+                            }
                         }
                         None => {
                             // Supervisor off: keep refreshing for CLI-driven agents.
@@ -61,7 +73,9 @@ pub(crate) fn spawn_harness(harness_tx: mpsc::Sender<ScanMsg>) -> bool {
             let agents = tokio::task::spawn_blocking(harness::scan)
                 .await
                 .unwrap_or_default();
-            let _ = harness_tx.send(ScanMsg::Harness(agents)).await;
+            if !publish(&harness_tx, ScanMsg::Harness(agents)).await {
+                break;
+            }
         }
     });
     supervisor_on
@@ -93,19 +107,27 @@ pub(crate) fn spawn_session_scanner(
         loop {
             tokio::select! {
                 _ = fallback.tick() => {
-                    if latest_sessions.is_empty() {
-                        full_scan(&session_scan_tx, &mut latest_sessions).await;
+                    let open = if latest_sessions.is_empty() {
+                        full_scan(&session_scan_tx, &mut latest_sessions).await
                     } else if scanner::refresh_process_liveness(&mut latest_sessions) {
-                        let _ = session_scan_tx
-                            .send(ScanMsg::SessionList(latest_sessions.clone()))
-                            .await;
+                        let list = ScanMsg::SessionList(latest_sessions.clone());
+                        publish(&session_scan_tx, list).await
+                    } else {
+                        true
+                    };
+                    if !open {
+                        break;
                     }
                 }
                 _ = full_reconcile.tick() => {
-                    full_scan(&session_scan_tx, &mut latest_sessions).await;
+                    if !full_scan(&session_scan_tx, &mut latest_sessions).await {
+                        break;
+                    }
                 }
                 Some(()) = session_invalidate_rx.recv() => {
-                    full_scan(&session_scan_tx, &mut latest_sessions).await;
+                    if !full_scan(&session_scan_tx, &mut latest_sessions).await {
+                        break;
+                    }
                 }
                 Some(session_id) = detail_rx.recv() => {
                     let sessions = latest_sessions.clone();
@@ -116,7 +138,9 @@ pub(crate) fn spawn_session_scanner(
                     .ok()
                     .flatten();
                     if let Some(d) = detail {
-                        let _ = session_scan_tx.send(ScanMsg::Detail(d)).await;
+                        if !publish(&session_scan_tx, ScanMsg::Detail(d)).await {
+                            break;
+                        }
                     }
                 }
             }
@@ -125,13 +149,13 @@ pub(crate) fn spawn_session_scanner(
 }
 
 /// Rescan every session, keep the result as the scanner's latest snapshot,
-/// and publish it.
-async fn full_scan(tx: &mpsc::Sender<ScanMsg>, latest: &mut Vec<models::SessionInfo>) {
+/// and publish it. False once the event loop is gone (see [`publish`]).
+async fn full_scan(tx: &mpsc::Sender<ScanMsg>, latest: &mut Vec<models::SessionInfo>) -> bool {
     let sessions = tokio::task::spawn_blocking(scanner::scan_sessions)
         .await
         .unwrap_or_default();
     *latest = sessions.clone();
-    let _ = tx.send(ScanMsg::SessionList(sessions)).await;
+    publish(tx, ScanMsg::SessionList(sessions)).await
 }
 
 /// Refresh per-task usage stats every 30s.
@@ -142,7 +166,7 @@ pub(crate) fn spawn_task_stats(task_stats_tx: mpsc::Sender<ScanMsg>) {
         loop {
             interval.tick().await;
             if let Ok(stats) = tokio::task::spawn_blocking(hal_lib::tasks::stats::refresh).await {
-                if task_stats_tx.send(ScanMsg::TaskStats(stats)).await.is_err() {
+                if !publish(&task_stats_tx, ScanMsg::TaskStats(stats)).await {
                     break;
                 }
             }

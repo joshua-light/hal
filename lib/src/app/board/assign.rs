@@ -123,7 +123,8 @@ impl App {
         };
         let prompt = planning_prompt(task);
         let title = task.session_title();
-        let agent_id = config::get().default_session_agent_id();
+        // The run's default, which `A` may have moved off the configured one.
+        let agent_id = self.default_session_agent_id().to_string();
         let supports_initial_prompt = config::get()
             .agent(&agent_id)
             .is_some_and(|a| a.supports_initial_prompt());
@@ -136,9 +137,6 @@ impl App {
             false,
         ) {
             Ok(tmux) => {
-                if !supports_initial_prompt {
-                    self.queue_pending_dispatch(tmux.clone(), prompt);
-                }
                 if let Err(e) = self.tasks.board.assign(&id, cwd, &agent_id, &tmux) {
                     let cleanup = self
                         .runtime
@@ -147,6 +145,12 @@ impl App {
                         .map(|cleanup| format!("; cleanup failed: {cleanup}"))
                         .unwrap_or_default();
                     return format!("assign rolled back: task write failed: {e}{cleanup}");
+                }
+                // Queued only once the card is bound: a prompt left queued
+                // for a session the rollback killed would never go Idle, and
+                // would hold up every dispatch behind it until it timed out.
+                if !supports_initial_prompt {
+                    self.queue_pending_dispatch(tmux.clone(), prompt);
                 }
                 // Named after its card the moment the scanner sees it; see
                 // `adopt_pending_spawn_names`.
@@ -219,6 +223,46 @@ mod tests {
                 app.pending_spawn_names.get("mock-spawn"),
                 Some(&"Task: implement it".into())
             );
+        });
+    }
+
+    #[test]
+    fn assignment_uses_the_agent_chosen_for_this_run() {
+        with_temp_home(|| {
+            let runtime = Arc::new(RecordingRuntime::default());
+            let mut app = App::new_with_runtime(runtime.clone());
+            // What `A` on the Sessions tab leaves behind.
+            app.default_session_agent_id = "codex-work".into();
+            let id = app.tasks.board.add("implement it").unwrap().unwrap();
+            app.tasks.pending_assign = Some(id.clone());
+
+            app.assign_task_agent("/tmp");
+
+            assert_eq!(runtime.spawns.lock().unwrap()[0].agent_id, "codex-work");
+            assert_eq!(
+                app.tasks.board.get(&id).unwrap().agent_id.as_deref(),
+                Some("codex-work")
+            );
+        });
+    }
+
+    #[test]
+    fn a_rolled_back_assign_leaves_no_prompt_queued() {
+        with_temp_home(|| {
+            let runtime = Arc::new(RecordingRuntime::default());
+            let mut app = App::new_with_runtime(runtime.clone());
+            let id = app.tasks.board.add("implement it").unwrap().unwrap();
+            // A file where the card's directory was: the binding can't be written.
+            let dir = crate::tasks::store::task_dir(&id).unwrap();
+            std::fs::remove_dir_all(&dir).unwrap();
+            std::fs::write(&dir, "").unwrap();
+            app.tasks.pending_assign = Some(id);
+
+            let message = app.assign_task_agent("/tmp");
+
+            assert!(message.contains("rolled back"), "{message}");
+            assert_eq!(runtime.kills.lock().unwrap().as_slice(), ["mock-spawn"]);
+            assert_eq!(app.pending_dispatch_count(), 0);
         });
     }
 

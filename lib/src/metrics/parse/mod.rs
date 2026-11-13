@@ -40,6 +40,9 @@ pub(super) struct AssistantCall {
     /// dedups on this so a resumed session isn't double-billed. Empty for Pi
     /// sessions, which don't carry these ids.
     pub(super) dedup_key: String,
+    /// The call stands for a whole session (Codex). An interrupt inside it
+    /// wasted an unknowable part of that cost, so none of it is charged.
+    pub(super) folded: bool,
 }
 
 pub(super) struct ParsedSession {

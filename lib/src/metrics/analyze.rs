@@ -127,7 +127,9 @@ pub fn analyze_with_progress<F: FnMut(usize, usize)>(mut on_progress: F) -> Metr
                 session_orphans += call_orphans;
                 // Charge the whole call cost once — Claude paid for the API
                 // response even though the tool call was Esc'd.
-                session_wasted += c;
+                if !call.folded {
+                    session_wasted += c;
+                }
                 if !call_last_orphan.is_empty() {
                     session_last_orphan_tool.clear();
                     session_last_orphan_tool.push_str(call_last_orphan);

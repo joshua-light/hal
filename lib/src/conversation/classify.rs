@@ -1,8 +1,8 @@
 //! The one shared session-state decision procedure.
 //!
-//! Each transcript backend (Claude JSONL, Pi JSONL) answers *format*
-//! questions through [`TranscriptDialect`]; the *meaning* of those answers —
-//! which stop reasons end a turn, when a blocking tool surfaces as
+//! Each transcript backend (Claude JSONL, Pi JSONL, Codex rollouts) answers
+//! *format* questions through [`TranscriptDialect`]; the *meaning* of those
+//! answers — which stop reasons end a turn, when a blocking tool surfaces as
 //! `Question` vs `WaitingForInput` — lives here, once. A fix to the state
 //! machine applies to every backend, and a backend that drifts fails the
 //! parity matrix below instead of silently misclassifying in production.
@@ -47,7 +47,7 @@ pub(crate) enum BlockingTool {
 /// Format adapter for one transcript dialect. Implementations answer syntax
 /// questions only; every semantic decision belongs in [`classify`].
 pub(crate) trait TranscriptDialect {
-    /// Dialect tag for log lines ("claude", "pi").
+    /// Dialect tag for log lines ("claude", "pi", "codex").
     const NAME: &'static str;
 
     /// Conversational role of `entry`, or `None` for entries the state
@@ -156,6 +156,7 @@ fn note_unknown_stop(dialect: &str, source: Option<&Path>, stop: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::conversation::codex::CodexDialect;
     use crate::conversation::pi::PiDialect;
     use crate::conversation::state::ClaudeDialect;
     use serde_json::json;
@@ -197,19 +198,45 @@ mod tests {
         json!([{"type": "toolCall", "id": "tc_1", "name": name, "arguments": {}}])
     }
 
+    /// A Codex `event_msg` record of `payload.type` `pt`.
+    fn x_event(pt: &str) -> Value {
+        json!({"type": "event_msg", "payload": {"type": pt}})
+    }
+    fn x_user(text: &str) -> Value {
+        json!({"type": "event_msg", "payload": {"type": "user_message", "message": text}})
+    }
+    fn x_assistant(text: &str) -> Value {
+        json!({"type": "response_item", "payload": {"type": "message", "role": "assistant",
+            "content": [{"type": "output_text", "text": text}]}})
+    }
+    fn x_tool_call(name: &str) -> Value {
+        json!({"type": "response_item", "payload": {"type": "function_call",
+            "name": name, "call_id": "c1", "arguments": "{}"}})
+    }
+    fn x_tool_output() -> Value {
+        json!({"type": "response_item", "payload": {"type": "function_call_output",
+            "call_id": "c1", "output": "ok"}})
+    }
+
     struct Case {
         name: &'static str,
         claude: Vec<Value>,
         expect_claude: SessionState,
         pi: Vec<Value>,
         expect_pi: SessionState,
+        /// `None` (with `expect_codex` `None`) where Codex has no such
+        /// situation; the row says why.
+        codex: Option<Vec<Value>>,
+        expect_codex: Option<SessionState>,
     }
 
     /// The parity matrix: the same conversational situation expressed in
     /// each dialect's JSON shape, with the state each must derive. Rows
-    /// where the dialects legitimately diverge (Pi has no blocking tools,
-    /// no interrupt marker, and maps error/aborted to end-of-turn) encode
-    /// that divergence explicitly so accidental drift fails loudly.
+    /// where the dialects legitimately diverge (Pi and Codex have no
+    /// blocking tools; only Claude has an interrupt marker; Pi maps
+    /// error/aborted to end-of-turn; Codex ends turns with lifecycle events,
+    /// not stop reasons) encode that divergence explicitly so accidental
+    /// drift fails loudly.
     fn matrix() -> Vec<Case> {
         use SessionState::*;
         vec![
@@ -219,6 +246,8 @@ mod tests {
                 expect_claude: Idle,
                 pi: vec![],
                 expect_pi: Idle,
+                codex: Some(vec![]),
+                expect_codex: Some(Idle),
             },
             Case {
                 name: "last = user prompt",
@@ -226,6 +255,8 @@ mod tests {
                 expect_claude: Processing,
                 pi: vec![p_user("do the thing")],
                 expect_pi: Processing,
+                codex: Some(vec![x_user("do the thing")]),
+                expect_codex: Some(Processing),
             },
             Case {
                 name: "turn complete (end_turn / stop)",
@@ -239,6 +270,13 @@ mod tests {
                     p_assistant(Some("stop"), json!([{"type":"text","text":"done"}])),
                 ],
                 expect_pi: WaitingForInput,
+                codex: Some(vec![
+                    x_user("hi"),
+                    x_event("task_started"),
+                    x_assistant("done"),
+                    x_event("task_complete"),
+                ]),
+                expect_codex: Some(WaitingForInput),
             },
             Case {
                 name: "non-blocking tool call",
@@ -246,6 +284,9 @@ mod tests {
                 expect_claude: Processing,
                 pi: vec![p_assistant(Some("toolUse"), p_tool_call("bash"))],
                 expect_pi: Processing,
+                // Codex tool calls bear no role: judged on `task_started`.
+                codex: Some(vec![x_event("task_started"), x_tool_call("exec_command")]),
+                expect_codex: Some(Processing),
             },
             Case {
                 name: "blocking tool (plan review)",
@@ -254,6 +295,10 @@ mod tests {
                 // Pi has no blocking tools: the same shape stays Processing.
                 pi: vec![p_assistant(Some("toolUse"), p_tool_call("ExitPlanMode"))],
                 expect_pi: Processing,
+                // Codex has no plan-review tool; `update_plan` only records
+                // progress and never waits on the user.
+                codex: None,
+                expect_codex: None,
             },
             Case {
                 name: "structured question",
@@ -261,6 +306,13 @@ mod tests {
                 expect_claude: Question,
                 pi: vec![p_assistant(Some("toolUse"), p_tool_call("AskUserQuestion"))],
                 expect_pi: Processing,
+                // Codex's question tool returns `{"accepted":true}` at once
+                // and the turn runs on, so it never blocks.
+                codex: Some(vec![
+                    x_event("task_started"),
+                    x_tool_call("request_user_input_async"),
+                ]),
+                expect_codex: Some(Processing),
             },
             Case {
                 name: "answered question, next turn not written yet",
@@ -271,6 +323,12 @@ mod tests {
                 expect_claude: Processing,
                 pi: vec![p_assistant(Some("toolUse"), p_tool_call("AskUserQuestion"))],
                 expect_pi: Processing,
+                codex: Some(vec![
+                    x_event("task_started"),
+                    x_tool_call("request_user_input_async"),
+                    x_tool_output(),
+                ]),
+                expect_codex: Some(Processing),
             },
             Case {
                 name: "approved plan, next turn not written yet",
@@ -281,6 +339,9 @@ mod tests {
                 expect_claude: Processing,
                 pi: vec![p_assistant(Some("toolUse"), p_tool_call("ExitPlanMode"))],
                 expect_pi: Processing,
+                // No plan-review tool, so no plan to approve (see above).
+                codex: None,
+                expect_codex: None,
             },
             Case {
                 name: "trailing interrupt marker",
@@ -295,6 +356,15 @@ mod tests {
                     p_user("[Request interrupted by user]"),
                 ],
                 expect_pi: Processing,
+                // Codex logs an interrupt as a `turn_aborted` event, which
+                // ends the turn.
+                codex: Some(vec![
+                    x_event("task_started"),
+                    x_tool_call("exec_command"),
+                    json!({"type": "event_msg",
+                        "payload": {"type": "turn_aborted", "reason": "interrupted"}}),
+                ]),
+                expect_codex: Some(WaitingForInput),
             },
             Case {
                 name: "error / aborted stop",
@@ -304,6 +374,10 @@ mod tests {
                 // Pi maps error to end-of-turn: the agent stopped.
                 pi: vec![p_assistant(Some("error"), json!([]))],
                 expect_pi: WaitingForInput,
+                // Codex has no error stop: every turn closes with
+                // `task_complete` or `turn_aborted`, both pinned above.
+                codex: None,
+                expect_codex: None,
             },
             Case {
                 name: "unknown stop reason",
@@ -311,6 +385,11 @@ mod tests {
                 expect_claude: Processing,
                 pi: vec![p_assistant(Some("banana"), json!([]))],
                 expect_pi: Processing,
+                // Codex reads stop reasons only from the lifecycle events it
+                // knows. An unknown event has no role and is skipped, so the
+                // turn stays running without the unknown-stop warning.
+                codex: Some(vec![x_event("task_started"), x_event("banana")]),
+                expect_codex: Some(Processing),
             },
             Case {
                 name: "in-flight entry (no stop reason)",
@@ -318,6 +397,9 @@ mod tests {
                 expect_claude: Processing,
                 pi: vec![p_assistant(None, json!([{"type":"text","text":"…"}]))],
                 expect_pi: Processing,
+                // An assistant message never carries a stop reason in Codex.
+                codex: Some(vec![x_event("task_started"), x_assistant("…")]),
+                expect_codex: Some(Processing),
             },
             Case {
                 name: "trailing tool_result-only user entry is skipped",
@@ -333,6 +415,13 @@ mod tests {
                     json!({"type": "message", "message": {"role": "toolResult", "toolCallId": "tc_1"}}),
                 ],
                 expect_pi: Processing,
+                // Codex tool output bears no role either.
+                codex: Some(vec![
+                    x_event("task_started"),
+                    x_tool_call("exec_command"),
+                    x_tool_output(),
+                ]),
+                expect_codex: Some(Processing),
             },
         ]
     }
@@ -352,6 +441,19 @@ mod tests {
                 "pi: {}",
                 case.name
             );
+            match (&case.codex, case.expect_codex) {
+                (Some(codex), Some(expect)) => assert_eq!(
+                    classify(&CodexDialect, codex, None),
+                    expect,
+                    "codex: {}",
+                    case.name
+                ),
+                (None, None) => {}
+                _ => panic!(
+                    "codex: {}: shape and expectation must both be set",
+                    case.name
+                ),
+            }
         }
     }
 

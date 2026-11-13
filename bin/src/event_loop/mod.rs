@@ -26,9 +26,11 @@ const STALL: Duration = Duration::from_millis(30);
 
 pub(crate) async fn run(terminal: &mut Term, frame_bytes: Arc<AtomicU64>) -> io::Result<()> {
     let mut app = App::new();
-    // Swap in the persisted ack and hold trackers so `z`-idled and held
-    // cards survive a restart. Loaded here, not in App::new(): tests must
-    // never touch the real home, so App::new() constructs in-memory ones.
+    // Everything persisted is loaded here, not in App::new(): tests must
+    // never touch the real home, so App::new() constructs in-memory state.
+    // The ack and hold trackers are what keep `z`-idled and held cards
+    // across a restart.
+    app.load_persisted();
     app.sessions.acks = hal_lib::acks::Acks::load();
     app.sessions.holds = hal_lib::holds::Holds::load();
     // A mistyped `[keymap]` entry is skipped, which would otherwise look
@@ -39,6 +41,10 @@ pub(crate) async fn run(terminal: &mut Term, frame_bytes: Arc<AtomicU64>) -> io:
             n => format!(" (+{} more: hal keys)", n),
         };
         app.set_error(format!("config.toml [keymap] {}{}", first, more));
+    }
+    // Set last: keys left out of the whole file outrank one skipped binding.
+    if let Some(problem) = config::load_problem() {
+        app.set_error(format!("config.toml: {}", problem));
     }
 
     let titles = Titles::new(config::get().title.concurrency);

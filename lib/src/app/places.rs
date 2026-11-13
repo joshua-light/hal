@@ -31,15 +31,14 @@ impl App {
                 out.push(Place::new(path, PlaceSource::Bookmark));
             }
         }
-        // Recents carry a coarse timestamp purely for ordering: a task's
-        // creation (or completion) time, a session's last activity.
+        // Recents carry a coarse epoch-ms timestamp purely for ordering: a
+        // task's creation (or completion) time, a session's last activity.
+        // Tasks store seconds, so they scale up to rank against sessions.
         let mut recents: Vec<(u64, PathBuf)> = Vec::new();
         for t in self.tasks.board.tasks() {
             if let Some(cwd) = t.cwd.as_deref() {
-                recents.push((
-                    t.created_at.max(t.done_at.unwrap_or(0)).max(0) as u64,
-                    PathBuf::from(cwd),
-                ));
+                let secs = t.created_at.max(t.done_at.unwrap_or(0)).max(0) as u64;
+                recents.push((secs.saturating_mul(1000), PathBuf::from(cwd)));
             }
         }
         for s in &self.sessions.last_sessions {
@@ -272,6 +271,27 @@ mod tests {
                     ("recent", PlaceSource::Recent),
                 ]
             );
+        });
+    }
+
+    #[test]
+    fn a_fresh_task_outranks_an_older_session() {
+        with_temp_home(|| {
+            let mut app = App::new();
+            let id = app.tasks.board.add("t").unwrap().unwrap();
+            app.tasks
+                .board
+                .assign(&id, "/tmp/fresh-task", "claude", "mux-1")
+                .unwrap();
+            let hour_ago_ms = (crate::persist::now_unix_secs() as u64 - 3_600) * 1000;
+            app.sessions.last_sessions = vec![crate::models::SessionInfo {
+                cwd: "/tmp/old-session".into(),
+                last_activity: Some(hour_ago_ms),
+                ..crate::test_util::session_info()
+            }];
+
+            let names: Vec<String> = app.known_places().into_iter().map(|p| p.name).collect();
+            assert_eq!(names, vec!["fresh-task", "old-session"]);
         });
     }
 

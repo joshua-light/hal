@@ -5,8 +5,8 @@
 //!
 //! - `error`: [`CliError`] and the JSON error contract.
 //! - `flags`: the shared `--flag` parser and the help-request scan.
-//! - `board`, `link` (`open`), `agent`, `build`, `resource`, `usage`,
-//!   `wake`, `keys`: one file per verb.
+//! - `board`, `link` (`open`), `agent`, `resource`, `usage`, `wake`,
+//!   `keys`: one file per verb.
 //! - `help`: `--help` text.
 
 mod agent;
@@ -32,16 +32,22 @@ pub fn dispatch(args: &[String]) -> Option<i32> {
     if args_request_help(rest) {
         return Some(handle(help::print_cli_help(args)));
     }
-    match verb.as_str() {
-        "open" => Some(handle(link::open(rest))),
-        "resource" => Some(handle(resource::resource(rest))),
-        "agent" => Some(handle(agent::agent_subcommand(rest))),
-        "board" => Some(handle(board::board_subcommand(rest))),
-        "usage" => Some(handle(usage::usage(rest))),
-        "keys" => Some(handle(keys::keys(rest))),
-        "wake" => Some(handle(wake::wake(rest))),
-        _ => None,
+    let code = match verb.as_str() {
+        "open" => handle(link::open(rest)),
+        "resource" => handle(resource::resource(rest)),
+        "agent" => handle(agent::agent_subcommand(rest)),
+        "board" => handle(board::board_subcommand(rest)),
+        "usage" => handle(usage::usage(rest)),
+        "keys" => handle(keys::keys(rest)),
+        "wake" => handle(wake::wake(rest)),
+        _ => return None,
+    };
+    // A verb runs before the logger starts, so stderr is the only place a
+    // config the verb half-ignored can be reported.
+    if let Some(problem) = hal_lib::config::load_problem() {
+        eprintln!("hal: config.toml: {}", problem);
     }
+    Some(code)
 }
 
 fn print_json(value: &serde_json::Value) {

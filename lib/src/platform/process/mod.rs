@@ -32,6 +32,12 @@ pub use macos::{command_line, current_dir, list_pids, open_codex_rollouts, Proce
 #[cfg(target_os = "windows")]
 pub use windows::{list_pids, terminate, terminate_group, Process};
 
+// Without an OS impl, `Process` and `list_pids` are missing and every user
+// fails to resolve. rustc reports this line first, so the build says why
+// before that cascade.
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+compile_error!("hal supports only Linux, macOS and Windows targets");
+
 pub trait ProcessInfo {
     fn parent_pid(pid: u32) -> Option<u32>;
     fn name(pid: u32) -> String;

@@ -527,7 +527,7 @@ mod tests {
             for id in ["a-1", "a-2"] {
                 app.session_task_links.insert(
                     id.into(),
-                    crate::tasks::session_links::TaskLink {
+                    crate::tasks::session_links::SessionTaskLink {
                         task_id: "tk-1".into(),
                         title: "Ship it".into(),
                     },

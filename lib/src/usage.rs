@@ -12,14 +12,13 @@
 
 use crate::config;
 use crate::platform::paths;
-use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 const ENDPOINT: &str = "https://api.anthropic.com/api/oauth/usage";
 const CURL_TIMEOUT_SECS: &str = "5";
@@ -303,14 +302,13 @@ impl Store {
         })
     }
 
+    /// Unlocked, the sync still runs: a statusline that shows a reading beats
+    /// one that shows nothing, and the worst case is one extra request.
     fn lock(&self) -> Option<fs::File> {
-        let guard = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(self.file.with_extension("lock"))
-            .ok()?;
-        guard.lock_exclusive().ok()?;
-        Some(guard)
+        let path = self.file.with_extension("lock");
+        crate::persist::lock_exclusive(&path)
+            .inspect_err(|e| log::warn!("usage: lock {} failed: {}", path.display(), e))
+            .ok()
     }
 
     fn load(&self) -> BTreeMap<String, Usage> {
@@ -321,14 +319,8 @@ impl Store {
     }
 
     fn save(&self, entries: &BTreeMap<String, Usage>) {
-        let tmp = self
-            .file
-            .with_extension(format!("tmp.{}", std::process::id()));
-        let Ok(body) = serde_json::to_vec_pretty(entries) else {
-            return;
-        };
-        if fs::write(&tmp, body).is_ok() && fs::rename(&tmp, &self.file).is_err() {
-            let _ = fs::remove_file(&tmp);
+        if let Err(e) = crate::persist::save_json(&self.file, entries) {
+            log::warn!("usage: save {} failed: {}", self.file.display(), e);
         }
     }
 }
@@ -446,10 +438,7 @@ fn clamp_pct(v: f64) -> u8 {
 }
 
 fn now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+    crate::persist::now_unix_secs().max(0) as u64
 }
 
 #[cfg(test)]

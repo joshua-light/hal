@@ -38,23 +38,9 @@ pub(super) fn discover_session_files() -> Vec<(PathBuf, bool, AgentKind)> {
         }
     }
 
-    if let Some(pi_sessions) = paths::pi_sessions_dir() {
-        if let Ok(projects) = std::fs::read_dir(&pi_sessions) {
-            for project in projects.flatten() {
-                let pdir = project.path();
-                if !pdir.is_dir() {
-                    continue;
-                }
-                let Ok(inner) = std::fs::read_dir(&pdir) else {
-                    continue;
-                };
-                for child in inner.flatten() {
-                    let p = child.path();
-                    if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-                        out.push((p, false, AgentKind::Pi));
-                    }
-                }
-            }
+    for p in crate::sessions::pi::transcripts() {
+        if p.is_file() {
+            out.push((p, false, AgentKind::Pi));
         }
     }
 

@@ -1,6 +1,6 @@
 //! Building blocks shared by the popups in this module.
 
-use crate::ui::common::{popup_block, CURSOR};
+use crate::ui::common::{popup_block, wrapped_total_rows, CURSOR};
 use crate::ui::palette::{accent_fg, DIM_TEXT};
 use ratatui::layout::{Alignment, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -39,17 +39,20 @@ pub(super) fn highlight_spans(
     spans
 }
 
-/// Rows a string occupies once the popup's Paragraph wraps it at `width`.
-pub(super) fn wrapped_rows(text: &str, width: usize) -> u16 {
-    if width == 0 {
-        return 1;
-    }
-    text.chars()
-        .count()
-        .div_ceil(width)
-        .max(1)
-        .try_into()
-        .unwrap_or(u16::MAX)
+/// An editor popup's input row: `prefix`, then the bold `input` in `fg`.
+/// Callers build it before sizing the popup so [`input_rows`] measures the
+/// exact `Line` the Paragraph draws.
+pub(super) fn input_line(prefix: Span<'static>, input: String, fg: Color) -> Line<'static> {
+    Line::from(vec![
+        prefix,
+        Span::styled(input, Style::default().fg(fg).add_modifier(Modifier::BOLD)),
+    ])
+}
+
+/// Rows `line` wraps to inside a bordered popup `popup_w` columns wide.
+/// The renderer does the counting, so word breaks and wide chars match.
+pub(super) fn input_rows(line: &Line, popup_w: u16) -> u16 {
+    wrapped_total_rows(std::slice::from_ref(line), popup_w.saturating_sub(2))
 }
 
 /// Top row of a fuzzy picker: the live filter with its cursor, and `count`
@@ -158,14 +161,14 @@ pub(super) fn key_footer(enter: &str, tab: Option<&str>) -> Line<'static> {
 }
 
 /// A single-line editor in `popup`: `title` on the top border, an italic
-/// `hint` on the bottom one, then the `prefix`ed `input` and the `footer`.
+/// `hint` on the bottom one, then the `input` row (see [`input_line`]) and
+/// the `footer`.
 pub(super) fn render_line_input(
     frame: &mut Frame,
     popup: Rect,
     title: &str,
     hint: &str,
-    prefix: Span<'_>,
-    input: String,
+    input: Line<'_>,
     footer: Line<'_>,
 ) {
     frame.render_widget(Clear, popup);
@@ -190,20 +193,61 @@ pub(super) fn render_line_input(
         return;
     }
 
-    let lines = vec![
-        Line::raw(""),
-        Line::from(vec![
-            prefix,
-            Span::styled(
-                input,
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
-            ),
-        ]),
-        Line::raw(""),
-        footer,
-    ];
+    let lines = vec![Line::raw(""), input, Line::raw(""), footer];
 
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+#[cfg(test)]
+mod input_rows_tests {
+    use super::{input_line, input_rows};
+    use crate::ui::common::CURSOR;
+    use ratatui::buffer::Buffer;
+    use ratatui::layout::Rect;
+    use ratatui::style::Color;
+    use ratatui::text::{Line, Span};
+    use ratatui::widgets::{Paragraph, Widget, Wrap};
+
+    const POPUP_W: u16 = 70;
+
+    /// Rows the popup's Paragraph actually draws for `line`. The line ends
+    /// with the cursor glyph, so its last drawn row is never blank.
+    fn rendered_rows(line: &Line<'static>) -> u16 {
+        let area = Rect::new(0, 0, POPUP_W - 2, 40);
+        let mut buf = Buffer::empty(area);
+        Paragraph::new(line.clone())
+            .wrap(Wrap { trim: false })
+            .render(area, &mut buf);
+        let last = (0..area.height)
+            .rev()
+            .find(|&y| (0..area.width).any(|x| buf[(x, y)].symbol() != " "))
+            .expect("something rendered");
+        last + 1
+    }
+
+    fn line(text: &str) -> Line<'static> {
+        input_line(Span::raw("  + "), format!("{text}{CURSOR}"), Color::White)
+    }
+
+    #[test]
+    fn wide_chars_count_two_columns() {
+        // A char-count estimate says 4 rows; each CJK char takes 2 columns.
+        let line = line(&"漢字".repeat(100));
+        assert_eq!(input_rows(&line, POPUP_W), rendered_rows(&line));
+        assert_eq!(input_rows(&line, POPUP_W), 7);
+    }
+
+    #[test]
+    fn long_words_wrap_whole() {
+        // Word wrap moves each URL to a fresh row and hard-splits it there,
+        // which a char-count estimate (3 rows) cannot see.
+        let text = format!(
+            "see https://example.com/{} and https://example.com/{}",
+            "a".repeat(60),
+            "b".repeat(60)
+        );
+        let line = line(&text);
+        assert_eq!(input_rows(&line, POPUP_W), rendered_rows(&line));
+        assert_eq!(input_rows(&line, POPUP_W), 5);
+    }
 }

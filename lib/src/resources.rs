@@ -9,7 +9,7 @@ use crate::agent::{AgentConfig, AgentKind};
 use serde::Deserialize;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// One `[accounts.<name>]` entry in `resources.toml`.
 #[derive(Clone, Debug, Deserialize)]
@@ -210,6 +210,23 @@ pub fn with_claude_home<T>(home: PathBuf, f: impl FnOnce() -> T) -> T {
     f()
 }
 
+/// Every Claude home to scan: the default one plus each Claude account's,
+/// without duplicates.
+pub fn claude_roots() -> Vec<PathBuf> {
+    let mut roots: Vec<_> = crate::platform::paths::claude_home().into_iter().collect();
+    for account in accounts()
+        .values()
+        .filter(|a| a.provider == AgentKind::Claude)
+    {
+        if let Some(home) = account.home() {
+            if !roots.contains(&home) {
+                roots.push(home);
+            }
+        }
+    }
+    roots
+}
+
 /// Every Codex sessions directory to scan: the default one plus each Codex
 /// account's, without duplicates.
 pub fn codex_roots() -> Vec<PathBuf> {
@@ -234,15 +251,28 @@ pub fn codex_roots() -> Vec<PathBuf> {
 pub fn label_sessions(sessions: &mut [crate::models::SessionInfo]) {
     let accounts = accounts();
     for session in sessions {
-        if let Some(path) = session.jsonl_path.as_ref() {
-            if let Some((id, _)) = accounts.iter().find(|(_, a)| {
-                Some(a.provider) == session.agent_kind()
-                    && a.home().is_some_and(|h| path.starts_with(h))
-            }) {
-                session.agent_id = id.clone();
-            }
+        let owner = match (session.agent_kind(), session.jsonl_path.as_ref()) {
+            (Some(kind), Some(path)) => owner(&accounts, kind, path),
+            _ => None,
+        };
+        if let Some(id) = owner {
+            session.agent_id = id.to_string();
         }
     }
+}
+
+/// The `kind` account in `accounts` whose home holds the transcript at
+/// `path`. Resuming under that account's id points the CLI at the home the
+/// transcript lives in.
+pub fn owner<'a>(
+    accounts: &'a BTreeMap<String, Account>,
+    kind: AgentKind,
+    path: &Path,
+) -> Option<&'a str> {
+    accounts
+        .iter()
+        .find(|(_, a)| a.provider == kind && a.home().is_some_and(|h| path.starts_with(h)))
+        .map(|(id, _)| id.as_str())
 }
 
 /// Give each nameless session a live broker worker hosts the name that

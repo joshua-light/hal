@@ -3,22 +3,29 @@
 use super::CliError;
 
 pub(crate) fn print_cli_help(topic: &[String]) -> Result<(), CliError> {
-    match topic.first().map(String::as_str) {
-        None => print!("{}", GENERAL_HELP),
-        Some("open") => print!("{}", OPEN_HELP),
-        Some("agent") => print!("{}", AGENT_HELP),
-        Some("board") => print!("{}", BOARD_HELP),
-        Some("resource") => print!("{}", RESOURCE_HELP),
-        Some("usage") => print!("{}", USAGE_HELP),
-        Some("keys") => print!("{}", KEYS_HELP),
-        Some(other) => {
-            return Err(CliError::Usage(format!(
-                "unknown help topic: {} (try `hal help`)",
-                other
-            )));
-        }
-    }
+    let topic = topic.first().map(String::as_str);
+    let text = help_text(topic).ok_or_else(|| {
+        CliError::Usage(format!(
+            "unknown help topic: {} (try `hal help`)",
+            topic.unwrap_or_default()
+        ))
+    })?;
+    print!("{}", text);
     Ok(())
+}
+
+fn help_text(topic: Option<&str>) -> Option<&'static str> {
+    Some(match topic {
+        None => GENERAL_HELP,
+        Some("open") => OPEN_HELP,
+        Some("agent") => AGENT_HELP,
+        Some("board") => BOARD_HELP,
+        Some("resource") => RESOURCE_HELP,
+        Some("usage") => USAGE_HELP,
+        Some("keys") => KEYS_HELP,
+        Some("wake") => WAKE_HELP,
+        Some(_) => return None,
+    })
 }
 
 const GENERAL_HELP: &str = r#"hal
@@ -34,11 +41,13 @@ Desktop-facing topics:
 
 Persistent agents (Agents tab):
   agent             Scaffold, run, poke, pause and inspect persistent agents
+  wake              Say a named thing happened, so agents watching it poll now
 
 Tasks board:
   board             Add a card to the personal Tasks board
+
+Accounts and task sessions:
   resource          Account capacity and the managed session working each task
-  wake              Say a named thing happened, so agents watching it poll now
   usage             Quota of a Claude account, from the shared store
 
 Examples:
@@ -90,10 +99,12 @@ const RESOURCE_HELP: &str = r#"hal resource
   release [NAME...] [--as NAME]             (in a session) hand back, or stop waiting
                                             for, some or all of it
   select --kind KIND --role ROLE            Preview a capacity-aware allocation
-  start --task ID --kind KIND --role ROLE --cwd DIR --prompt TEXT
+  start --task ID --kind KIND --role ROLE --cwd DIR --prompt TEXT [--title TEXT]
                                             Start the session working a task; a task
                                             with a live session in another role is
-                                            handed over (new one starts, old one stops)
+                                            handed over (new one starts, old one stops).
+                                            --title names the session; default: the
+                                            card's title
   status [--worker ID]                      Workers, their accounts and generations
   stop --worker ID [--reason TEXT]          End a worker's session
   retry --worker ID                         Requeue a blocked worker
@@ -171,7 +182,27 @@ Options:
                        URL-scheme handler)
 
 Emits one JSON line with kind/tmux/cwd/agent_id/prompt/prompt_status.
-Install the macOS URL-scheme handler with contrib/macos/install-link-handler.sh.
+hal ships no URL-scheme handler. Register one locally with your OS; it must
+call `hal open <url>`.
+"#;
+
+const WAKE_HELP: &str = r#"hal wake <name>
+
+Say a named thing happened. Every agent whose agent.toml lists the name in
+trigger.wake runs its poll (or interval tick) on the next second instead of
+at the end of interval_s:
+
+  [trigger]
+  kind = "poll"
+  wake = ["board"]
+
+The board wakes `board` on every card status change. Use this verb when a
+script changes something the hub cannot see. A wake carries no payload: the
+agent's poll still decides what the event is, so a lost wake costs only
+latency. trigger.wake needs kind = "poll" or "interval".
+
+The name uses letters, digits, '-' and '_' (at most 64). The wake is a stamp
+at ~/.hal/wake/<name>. Emits {"ok":true,"wake":"<name>"}.
 "#;
 
 const AGENT_HELP: &str = r#"hal agent
@@ -247,3 +278,35 @@ with the user as one note, the branch it built as another, and what
 verification found as a third; a session taking the card over reads them
 first. A hand-over link (`&role=…`) is refused for a card with no note.
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The topics `hal help` lists: two-space-indented lines that do not
+    /// start with `hal` (usage lines and examples do).
+    fn listed_topics() -> Vec<&'static str> {
+        GENERAL_HELP
+            .lines()
+            .filter_map(|line| line.strip_prefix("  "))
+            .filter(|rest| !rest.starts_with(' '))
+            .filter_map(|rest| rest.split_whitespace().next())
+            .filter(|word| *word != "hal")
+            .collect()
+    }
+
+    #[test]
+    fn every_listed_topic_has_help() {
+        let topics = listed_topics();
+        assert!(topics.contains(&"wake"), "{topics:?}");
+        for topic in topics {
+            assert!(help_text(Some(topic)).is_some(), "no help for {topic}");
+        }
+    }
+
+    #[test]
+    fn an_unknown_topic_is_a_usage_error() {
+        let err = print_cli_help(&["nope".to_string()]).unwrap_err();
+        assert!(matches!(err, CliError::Usage(_)), "{err:?}");
+    }
+}

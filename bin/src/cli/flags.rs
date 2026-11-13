@@ -95,9 +95,12 @@ fn next_value(args: &[String], i: &mut usize, name: &str) -> Result<String, CliE
     Ok(v)
 }
 
-/// Boolean flags that take no value — the no-argument arms of [`parse_flags`].
-/// Every other recognized `--flag` consumes the following token as its value.
-const BOOL_FLAGS: &[&str] = &["--dry-run", "--notify", "--json"];
+/// Every value-less flag of every verb: [`parse_flags`] (`board`, `open`),
+/// `agent`, `usage`, and the broker behind `resource`. The help scan treats
+/// any other `--flag` as taking a value, so a boolean missing here hides a
+/// `-h` after it and the verb runs for real. No verb gives one of these
+/// names a value, so one list serves them all.
+pub(super) const BOOL_FLAGS: &[&str] = &["--dry-run", "--notify", "--json", "--force", "--refresh"];
 
 /// Flag-aware scan for a help request among a verb's args.
 ///
@@ -171,6 +174,17 @@ mod tests {
             "--task".to_string(),
             "-h".to_string()
         ]));
+    }
+
+    #[test]
+    fn help_scan_sees_help_after_a_boolean_flag() {
+        use crate::test_util::argv;
+        // Regression: `--force` was read as taking `-h` for its value, so
+        // the command ran a paid tick instead of printing help.
+        assert!(args_request_help(&argv(&["once", "x", "--force", "-h"])));
+        // Regression: `-h` fell through to `usage` as an unknown argument.
+        assert!(args_request_help(&argv(&["--refresh", "-h"])));
+        assert!(args_request_help(&argv(&["accounts", "--refresh", "-h"])));
     }
 
     #[test]

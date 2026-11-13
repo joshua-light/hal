@@ -60,7 +60,7 @@ fn bind(args: &[String]) -> Result<(), CliError> {
     if let Some(sid) = sid {
         hal_lib::tasks::session_links::link(
             sid,
-            hal_lib::tasks::session_links::TaskLink {
+            hal_lib::tasks::session_links::SessionTaskLink {
                 task_id: task.into(),
                 title: format!("{} / {}", task, field("role")?),
             },

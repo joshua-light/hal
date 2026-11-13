@@ -19,7 +19,7 @@ use crate::platform::paths::hal_home;
 /// (refreshed while the task is readable) so the Sessions grid can still
 /// label the group after the task is archived or deleted.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TaskLink {
+pub struct SessionTaskLink {
     pub task_id: String,
     /// Task title snapshot; the grid's fallback label once the task is gone.
     #[serde(default)]
@@ -29,7 +29,7 @@ pub struct TaskLink {
 #[derive(Default, Serialize, Deserialize)]
 struct OnDisk {
     #[serde(default)]
-    links: HashMap<String, TaskLink>,
+    links: HashMap<String, SessionTaskLink>,
 }
 
 /// Serializes concurrent writers so a load/insert/save cycle can't race
@@ -41,9 +41,9 @@ fn store_path() -> Option<PathBuf> {
     hal_home().map(|h| h.join("session-tasks.json"))
 }
 
-/// Current on-disk map of `session_id → TaskLink`. Empty on any read/parse
+/// Current on-disk map of `session_id → SessionTaskLink`. Empty on any read/parse
 /// failure — a missing store is the normal first-run state.
-pub fn load() -> HashMap<String, TaskLink> {
+pub fn load() -> HashMap<String, SessionTaskLink> {
     let Some(path) = store_path() else {
         return HashMap::new();
     };
@@ -61,7 +61,7 @@ pub fn load() -> HashMap<String, TaskLink> {
 
 /// Atomically upsert `sid → link`. Holds `WRITE_LOCK` across the
 /// load/insert/save cycle so two writers can't clobber each other's entries.
-pub fn link(sid: &str, link: TaskLink) -> io::Result<()> {
+pub fn link(sid: &str, link: SessionTaskLink) -> io::Result<()> {
     mutate(|links| {
         links.insert(sid.to_string(), link);
     })
@@ -75,7 +75,7 @@ pub fn unlink(sid: &str) -> io::Result<()> {
     })
 }
 
-fn mutate(f: impl FnOnce(&mut HashMap<String, TaskLink>)) -> io::Result<()> {
+fn mutate(f: impl FnOnce(&mut HashMap<String, SessionTaskLink>)) -> io::Result<()> {
     let Some(path) = store_path() else {
         return Ok(());
     };
@@ -92,8 +92,8 @@ mod tests {
     use super::*;
     use crate::test_util::with_temp_home;
 
-    fn sample(task_id: &str) -> TaskLink {
-        TaskLink {
+    fn sample(task_id: &str) -> SessionTaskLink {
+        SessionTaskLink {
             task_id: task_id.into(),
             title: "Fix auth".into(),
         }

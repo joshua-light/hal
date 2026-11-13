@@ -21,6 +21,9 @@ pub(in crate::app) struct SpawnWatch {
     /// Where the session was spawned; parents the placeholder card's group.
     cwd: String,
     deadline: Instant,
+    /// Whether a "starting…" card stands in until the scanner sees the
+    /// session. A resume needs none: its Inactive card is already there.
+    pub(super) placeholder: bool,
 }
 
 /// How long a freshly spawned agent gets to appear in a scan snapshot before
@@ -152,6 +155,7 @@ impl App {
             kind: SessionKind::Agent(kind),
             cwd,
             deadline: Instant::now() + SPAWN_WATCH_TIMEOUT,
+            placeholder: true,
         });
         let named = title.is_some();
         if let Some(title) = title {
@@ -170,8 +174,24 @@ impl App {
             kind: SessionKind::Terminal,
             cwd,
             deadline: Instant::now() + TERMINAL_WATCH_TIMEOUT,
+            placeholder: true,
         });
         self.name_or_open_spawn(false);
+    }
+
+    /// The watchdog alone, for a session resumed from its Inactive card. An
+    /// agent that dies on resume (a transcript the CLI rejects, an expired
+    /// login) would otherwise leave "resumed …" as the last word and the
+    /// card Inactive. The card stays where it is and keeps the cursor.
+    pub(in crate::app) fn watch_resume(&mut self, tmux_name: String, session: &SessionInfo) {
+        self.spawn_watches.push(SpawnWatch {
+            tmux_name,
+            agent: session.agent_id.clone(),
+            kind: session.kind,
+            cwd: session.cwd.clone(),
+            deadline: Instant::now() + SPAWN_WATCH_TIMEOUT,
+            placeholder: false,
+        });
     }
 
     /// The last step of a spawn, with the cursor on its placeholder: ask
@@ -562,6 +582,33 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         assert_eq!(status(&app), "claude explained");
+        assert!(app.status_is_error);
+    }
+
+    // Enter on an Inactive card resumes it under a watchdog but adds no
+    // placeholder: the card it was resumed from is still on the grid.
+    #[test]
+    fn a_resume_that_dies_is_reported_and_adds_no_card() {
+        let inactive = SessionInfo {
+            session_id: "sid-old".into(),
+            state: SessionState::Inactive,
+            cwd: "/tmp".into(),
+            ..crate::test_util::session_info()
+        };
+        let (mut app, runtime) = app_with(vec![inactive]);
+        app.select_session_by_id("sid-old");
+
+        assert!(app.focus_selected_session().is_empty());
+        assert_eq!(app.spawn_watches.len(), 1);
+        let cards: usize = app.sessions.groups.iter().map(|g| g.sessions.len()).sum();
+        assert_eq!(cards, 1);
+        assert_eq!(app.selected_session_id().as_deref(), Some("sid-old"));
+
+        runtime
+            .exists
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        assert!(app.poll_spawn_watches());
+        assert!(app.spawn_watches.is_empty());
         assert!(app.status_is_error);
     }
 

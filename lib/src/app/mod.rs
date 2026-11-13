@@ -104,17 +104,18 @@ pub struct App {
     pub task_kind_picker: Option<TaskKindPickerState>,
     /// State behind [`View::Settings`] (`,` on any tab).
     pub settings: SettingsView,
-    /// Agent used by Sessions-tab new-session actions. Seeded from
+    /// Agent every new session starts with: Sessions-tab spawns, board task
+    /// assignment and the Agents tab. Seeded from
     /// `[projects].default_session_agent`; `A` changes it for this run.
     default_session_agent_id: String,
     /// State behind [`View::TaskLinkPicker`] (`L` on the Sessions tab).
     pub task_link_picker: Option<TaskLinkPickerState>,
     /// State behind [`View::SessionFinder`] (`/` on the Sessions tab).
     pub session_finder: Option<SessionFinderState>,
-    /// `session_id → TaskLink` sidecar snapshot that [`Self::build_groups`]
+    /// `session_id → SessionTaskLink` sidecar snapshot that [`Self::build_groups`]
     /// clusters by. Reloaded on every scan tick so links written by another
     /// instance show up without a restart.
-    pub(crate) session_task_links: HashMap<String, crate::tasks::session_links::TaskLink>,
+    pub(crate) session_task_links: HashMap<String, crate::tasks::session_links::SessionTaskLink>,
     pub tmux_pane: Option<TmuxPaneView>,
     pub folder_picker: Option<FolderPicker>,
     /// Folder bookmarks: listed by the bookmarks picker (`M`) and marked in
@@ -166,8 +167,19 @@ impl Default for App {
 }
 
 impl App {
+    /// An app with nothing in it. It reads no state from disk, so a test
+    /// that builds one never sees the developer's real home; the binary
+    /// follows up with [`Self::load_persisted`].
     pub fn new() -> Self {
         Self::new_with_runtime(Arc::new(SystemAgentRuntime))
+    }
+
+    /// Read what earlier runs left on disk: the task board, the bookmarks
+    /// and the session→card links.
+    pub fn load_persisted(&mut self) {
+        self.tasks.load();
+        self.bookmarks = Bookmarks::load();
+        self.session_task_links = crate::tasks::session_links::load();
     }
 
     pub fn new_with_runtime(runtime: Arc<dyn AgentRuntime>) -> Self {
@@ -201,10 +213,10 @@ impl App {
             default_session_agent_id: config::get().default_session_agent_id(),
             task_link_picker: None,
             session_finder: None,
-            session_task_links: crate::tasks::session_links::load(),
+            session_task_links: HashMap::new(),
             tmux_pane: None,
             folder_picker: None,
-            bookmarks: Bookmarks::load(),
+            bookmarks: Bookmarks::default(),
             gh_create_input: None,
             current_tab: Tab::Sessions,
             under_overlay: View::Grid,

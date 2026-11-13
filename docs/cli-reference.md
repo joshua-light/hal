@@ -17,7 +17,7 @@ full. The other verbs document themselves: `hal help <verb>`.
 - `resource` passes the broker's line through: `{"ok": true, "result": …}`
   or `{"ok": false, "error": "…"}`, exit 1 on any failure. `resource hook`
   prints only a note for the agent, when it has one.
-- `--help` or `-h` after any verb except `wake` prints its help.
+- `--help` or `-h` after any verb prints its help.
 
 ## Verbs
 
@@ -29,7 +29,7 @@ full. The other verbs document themselves: `hal help <verb>`.
 | `resource` | Accounts, task sessions and shared resources | `hal help resource`, [resource-management.md](resource-management.md) |
 | `usage` | Quota of a Claude account | `hal help usage` |
 | `keys` | `hal keys [ide\|vim]`: every action and its keys, as the TOML that rebinds them | `hal help keys`, [keybindings.md](keybindings.md#rebinding-keys) |
-| `wake` | `hal wake <name>`: agents watching `<name>` poll now. Prints `{"ok": true, "wake": "<name>"}` | none |
+| `wake` | `hal wake <name>`: agents watching `<name>` poll now. Prints `{"ok": true, "wake": "<name>"}` | `hal help wake` |
 
 ## agent
 

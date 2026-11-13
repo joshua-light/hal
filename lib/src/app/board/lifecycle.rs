@@ -80,11 +80,13 @@ impl App {
             false,
         ) {
             Ok(tmux) => {
-                self.queue_pending_dispatch(tmux.clone(), PROCEED_PROMPT.to_string());
                 if let Err(e) = self.tasks.board.rebind_tmux(&id, &tmux) {
                     let _ = self.runtime.kill_session(&tmux);
                     return format!("proceed cancelled: task binding write failed: {e}");
                 }
+                // After the rebind, so a rollback leaves nothing queued for
+                // the session it killed; see `assign_task_agent`.
+                self.queue_pending_dispatch(tmux.clone(), PROCEED_PROMPT.to_string());
                 if let Err(e) = self.tasks.board.set_status(&id, TaskStatus::Running) {
                     return format!("agent resumed but task state write failed: {e}");
                 }

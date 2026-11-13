@@ -21,7 +21,7 @@ use std::collections::HashMap;
 /// liveness flips already reorder the underlying sort.
 fn cluster_by_task(
     sessions: Vec<SessionInfo>,
-    links: &HashMap<String, crate::tasks::session_links::TaskLink>,
+    links: &HashMap<String, crate::tasks::session_links::SessionTaskLink>,
     priorities: &HashMap<String, TaskPriority>,
 ) -> Vec<SessionInfo> {
     let mut slots: Vec<Option<SessionInfo>> = sessions.into_iter().map(Some).collect();
@@ -80,9 +80,10 @@ impl App {
             .spawn_watches
             .iter()
             .filter(|w| {
-                !sessions
-                    .iter()
-                    .any(|s| s.tmux_session.as_deref() == Some(w.tmux_name.as_str()))
+                w.placeholder
+                    && !sessions
+                        .iter()
+                        .any(|s| s.tmux_session.as_deref() == Some(w.tmux_name.as_str()))
             })
             .map(|w| {
                 let mut card = spawning_placeholder(w);
@@ -313,7 +314,7 @@ mod tests {
             let c = fake_session("s-c", SessionState::Idle);
             crate::tasks::session_links::link(
                 "s-b",
-                crate::tasks::session_links::TaskLink {
+                crate::tasks::session_links::SessionTaskLink {
                     task_id: "tk-9".into(),
                     title: "Fix auth".into(),
                 },
@@ -352,7 +353,7 @@ mod tests {
             for sid in ["s-a", "s-c"] {
                 crate::tasks::session_links::link(
                     sid,
-                    crate::tasks::session_links::TaskLink {
+                    crate::tasks::session_links::SessionTaskLink {
                         task_id: "tk-1".into(),
                         title: "Fix auth".into(),
                     },
@@ -406,7 +407,7 @@ mod tests {
             ] {
                 crate::tasks::session_links::link(
                     sid,
-                    crate::tasks::session_links::TaskLink {
+                    crate::tasks::session_links::SessionTaskLink {
                         task_id: task_id.into(),
                         title: String::new(),
                     },
@@ -433,7 +434,7 @@ mod tests {
             let id = app.tasks.board.add("Ship the parser").unwrap().unwrap();
             crate::tasks::session_links::link(
                 "s-linked",
-                crate::tasks::session_links::TaskLink {
+                crate::tasks::session_links::SessionTaskLink {
                     task_id: id.clone(),
                     title: "old snapshot".into(),
                 },

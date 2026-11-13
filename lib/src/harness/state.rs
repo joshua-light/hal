@@ -74,7 +74,7 @@ pub(super) fn today_utc() -> String {
 }
 
 pub fn now_unix() -> i64 {
-    chrono::Utc::now().timestamp()
+    crate::persist::now_unix_secs()
 }
 
 /// The first second of the UTC day after `now`: when daily spend rolls over.
@@ -205,10 +205,13 @@ pub fn set_paused(dir: &Path, paused: bool) -> io::Result<AgentState> {
     })
 }
 
-/// Clear harness bookkeeping. The workdir is untouched.
+/// Clear harness bookkeeping. The workdir is untouched. A missing state
+/// file is already reset; any other failure leaves the old state in place.
 pub fn reset(dir: &Path) -> io::Result<()> {
-    let _ = fs::remove_file(state_path(dir));
-    Ok(())
+    match fs::remove_file(state_path(dir)) {
+        Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
+        _ => Ok(()),
+    }
 }
 
 #[cfg(test)]
@@ -262,6 +265,20 @@ mod tests {
         .unwrap();
         let s = set_paused(tmp.path(), false).unwrap();
         assert_eq!((s.stopped_reason, s.stopped_until), (None, None));
+    }
+
+    #[test]
+    fn reset_tolerates_a_missing_file_but_reports_a_stuck_one() {
+        let tmp = tempfile::tempdir().unwrap();
+        reset(tmp.path()).unwrap();
+
+        update_state(tmp.path(), |s| s.ticks = 3).unwrap();
+        reset(tmp.path()).unwrap();
+        assert_eq!(load_state(tmp.path()), AgentState::default());
+
+        // A directory in the file's place cannot be removed as a file.
+        fs::create_dir(state_path(tmp.path())).unwrap();
+        assert!(reset(tmp.path()).is_err());
     }
 
     #[test]

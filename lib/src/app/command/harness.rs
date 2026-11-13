@@ -112,13 +112,13 @@ impl App {
                 let msg = match harness::reset(&dir) {
                     Ok(()) => {
                         harness::log_event(&dir, "info", "state reset from the hub");
+                        if let Some(a) = self.harness.selected_mut() {
+                            a.state = Default::default();
+                        }
                         format!("{}: state reset (workdir untouched)", name)
                     }
                     Err(e) => format!("{}: reset failed: {}", name, e),
                 };
-                if let Some(a) = self.harness.selected_mut() {
-                    a.state = Default::default();
-                }
                 self.set_status(msg);
             }
         }

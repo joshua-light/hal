@@ -79,13 +79,7 @@ pub(super) fn extract_text_content(entry: &Value) -> String {
                                     parts.push(truncate_str(text, 200));
                                 }
                             }
-                            Some("tool_use") => {
-                                parts.push(format!(
-                                    "{}{}]",
-                                    TOOL_MARKER_PREFIX,
-                                    tool_display(block)
-                                ));
-                            }
+                            Some("tool_use") => parts.push(tool_display(block)),
                             Some("thinking") => {
                                 parts.push(THINKING_MARKER.to_string());
                             }
@@ -165,26 +159,35 @@ fn tag_close_index(chars: &[char], start: usize) -> Option<usize> {
     None
 }
 
-fn tool_display(block: &serde_json::Value) -> String {
-    let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("?");
-    let Some(raw) = block.get("input").and_then(|i| tool_brief_arg(name, i)) else {
-        return name.to_string();
-    };
-    // `]` would terminate the surrounding `[tool: ...]` marker; whitespace
-    // collapses to single spaces so the display fits on one line.
-    let cleaned = raw.replace(']', ")");
-    let brief: String = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
-    let mut end = brief.len().min(60);
-    while end > 0 && !brief.is_char_boundary(end) {
-        end -= 1;
-    }
-    if end == 0 {
+/// Chars of a tool argument the marker keeps before it adds `…`.
+const TOOL_ARG_MAX_CHARS: usize = 60;
+
+/// The `[tool: name(arg)]` marker every dialect renders for a tool call.
+/// `raw_arg` is the dialect's pick of the one argument worth showing; a
+/// missing or blank one leaves the bare name.
+pub(super) fn tool_marker(name: &str, raw_arg: Option<&str>) -> String {
+    // `]` would end the marker early; whitespace collapses so it stays on
+    // one line.
+    let brief = raw_arg
+        .unwrap_or_default()
+        .replace(']', ")")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let display = if brief.is_empty() {
         name.to_string()
-    } else if end < brief.len() {
+    } else if let Some((end, _)) = brief.char_indices().nth(TOOL_ARG_MAX_CHARS) {
         format!("{}({}…)", name, &brief[..end])
     } else {
         format!("{}({})", name, brief)
-    }
+    };
+    format!("{}{}]", TOOL_MARKER_PREFIX, display)
+}
+
+fn tool_display(block: &serde_json::Value) -> String {
+    let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("?");
+    let raw = block.get("input").and_then(|i| tool_brief_arg(name, i));
+    tool_marker(name, raw.as_deref())
 }
 
 fn tool_brief_arg(name: &str, input: &serde_json::Value) -> Option<String> {
@@ -255,6 +258,32 @@ mod tests {
         assert_eq!(strip_xml_tags("why is a < b here?"), "why is a < b here?");
         // A non-tag `<`…`>` pair must be left untouched.
         assert_eq!(strip_xml_tags("x < 5 and y > 3"), "x < 5 and y > 3");
+    }
+
+    #[test]
+    fn tool_marker_truncates_by_chars_not_bytes() {
+        // 70 three-byte chars: a byte cap would keep about 20 of them.
+        let path = format!("/home/u/{}", "文档".repeat(35));
+        let kept: String = path.chars().take(TOOL_ARG_MAX_CHARS).collect();
+        assert_eq!(
+            tool_marker("Read", Some(&path)),
+            format!("[tool: Read({}…)]", kept)
+        );
+        let short = "/home/u/文档/说明.md";
+        assert_eq!(
+            tool_marker("Read", Some(short)),
+            format!("[tool: Read({})]", short)
+        );
+    }
+
+    #[test]
+    fn tool_marker_cleans_the_argument() {
+        assert_eq!(
+            tool_marker("Bash", Some("echo  a]\n\tb")),
+            "[tool: Bash(echo a) b)]"
+        );
+        assert_eq!(tool_marker("Bash", Some(" \n\t ")), "[tool: Bash]");
+        assert_eq!(tool_marker("Bash", None), "[tool: Bash]");
     }
 
     #[test]

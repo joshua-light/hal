@@ -1,9 +1,8 @@
 //! Counts of Claude Code session JSONLs whose files were created today or
-//! this calendar week (ISO, Monday-anchored). Walks `~/.claude/projects/`
-//! and reads each JSONL's `created()` metadata — pure file-system work, no
-//! parsing.
+//! this calendar week (ISO, Monday-anchored). Walks each Claude home's
+//! `projects/` and reads each JSONL's `created()` metadata — pure file-system
+//! work, no parsing.
 
-use crate::platform::paths;
 use chrono::{Datelike, Local, NaiveDate, TimeZone};
 use std::fs;
 use std::time::SystemTime;
@@ -14,14 +13,9 @@ pub struct SessionCounts {
     pub week: u32,
 }
 
+/// Counts across the default Claude home and every Claude account home, the
+/// roots the live scan walks.
 pub fn count_recent_sessions() -> SessionCounts {
-    let Some(projects) = paths::claude_home().map(|d| d.join("projects")) else {
-        return SessionCounts::default();
-    };
-    let Ok(proj_iter) = fs::read_dir(&projects) else {
-        return SessionCounts::default();
-    };
-
     let now = Local::now();
     let today: NaiveDate = now.date_naive();
     let week_start: NaiveDate =
@@ -34,7 +28,11 @@ pub fn count_recent_sessions() -> SessionCounts {
     let scratch_proj_dir = crate::sessions::scanner::scratch_project_dir_name();
 
     let mut counts = SessionCounts::default();
-    for proj in proj_iter.flatten() {
+    let projects = crate::resources::claude_roots()
+        .into_iter()
+        .filter_map(|home| fs::read_dir(home.join("projects")).ok())
+        .flatten();
+    for proj in projects.flatten() {
         if let Some(skip) = scratch_proj_dir.as_deref() {
             if proj.file_name().to_str() == Some(skip) {
                 continue;
@@ -79,7 +77,30 @@ pub fn count_recent_sessions() -> SessionCounts {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use crate::platform::paths;
     use crate::test_util::with_temp_home;
+
+    #[test]
+    fn sessions_under_an_extra_account_home_are_counted() {
+        with_temp_home(|| {
+            let home = dirs::home_dir().unwrap();
+            fs::create_dir_all(home.join(".hal")).unwrap();
+            fs::write(
+                home.join(".hal/resources.toml"),
+                "[accounts.work]\nprovider = \"claude\"\nhome = \"~/.claude-work\"\n",
+            )
+            .unwrap();
+            for projects in [".claude/projects/-p", ".claude-work/projects/-p"] {
+                fs::create_dir_all(home.join(projects)).unwrap();
+                fs::write(home.join(projects).join("a.jsonl"), "{}\n").unwrap();
+            }
+
+            let counts = count_recent_sessions();
+
+            assert_eq!(counts.today, 2);
+            assert_eq!(counts.week, 2);
+        });
+    }
 
     #[test]
     fn scratch_summary_sessions_are_not_counted() {

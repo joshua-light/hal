@@ -41,8 +41,8 @@ use crate::ops::OpError;
 use crate::sessions::scanner;
 use crate::spawn::SessionTarget;
 use crate::tasks::session_links;
-use crate::tasks::store;
-use crate::{config, send, spawn, title};
+use crate::tasks::store::{self, TaskState};
+use crate::{send, spawn, title};
 use target::{board_card, live_session_in};
 
 /// Options for [`open`].
@@ -95,16 +95,14 @@ fn bind_card(task_id: &str, cwd: &Path, agent_id: &str, tmux: &str) -> Result<()
 /// Spawn the session `link` asks for, name it, and deliver its prompt.
 pub fn open(link: &Link, opts: OpenOpts) -> Result<Opened, OpError> {
     let mut target = self::target(link, opts.agent.as_deref())?;
-    let agent = config::get()
-        .agent(&target.agent_id)
-        .ok_or_else(|| OpError::Usage(format!("unknown agent id: {}", target.agent_id)))?;
+    let agent = target.agent.clone();
+    let task_card = target.card.take();
     let cwd = target.cwd.to_string_lossy().into_owned();
     let wait = Duration::from_secs(opts.wait_secs.unwrap_or(DEFAULT_PROMPT_WAIT_SECS));
 
     let mut superseded = None;
-    if let Link::Task(task) = link {
-        let card = board_card(task.id.as_str())?;
-        let live = live_session_in(&card, &target.cwd, send::tmux_session_exists);
+    if let (Link::Task(task), Some(card)) = (link, task_card.as_ref()) {
+        let live = live_session_in(card, &target.cwd, send::tmux_session_exists);
         if task.is_handover() {
             superseded = live;
         } else if let Some(tmux) = live {
@@ -121,7 +119,7 @@ pub fn open(link: &Link, opts: OpenOpts) -> Result<Opened, OpError> {
             return Ok(Opened {
                 target,
                 tmux,
-                session_id: card.session_id,
+                session_id: card.session_id.clone(),
                 prompt_status,
                 task_id: Some(task.id.to_string()),
                 reused: true,
@@ -170,7 +168,7 @@ pub fn open(link: &Link, opts: OpenOpts) -> Result<Opened, OpError> {
     };
 
     if let (Some(card), Some(sid)) = (card_id, session_id.as_deref()) {
-        link_session_to_card(sid, card);
+        link_session_to_card(sid, card, task_card.as_ref());
     }
     if let Some(card) = &filed {
         start_card(card.as_str())?;
@@ -203,15 +201,18 @@ pub fn open(link: &Link, opts: OpenOpts) -> Result<Opened, OpError> {
 /// task clustering. Cosmetic, unlike [`bind_card`]: the card already owns
 /// the session, so a failed sidecar write costs a badge, not the binding —
 /// it is logged and the open still succeeds.
-fn link_session_to_card(session_id: &str, task_id: &str) {
-    let title = match board_card(task_id) {
+///
+/// `card` is the task link's card as [`target`] read it; a chore's card was
+/// minted after that, so it is read here.
+fn link_session_to_card(session_id: &str, task_id: &str, card: Option<&TaskState>) {
+    let title = match card.cloned().map(Ok).unwrap_or_else(|| board_card(task_id)) {
         Ok(card) => card.title.unwrap_or(card.prompt),
         Err(e) => {
             log::warn!("open task: card {} vanished before linking: {}", task_id, e);
             return;
         }
     };
-    let link = session_links::TaskLink {
+    let link = session_links::SessionTaskLink {
         task_id: task_id.to_string(),
         title,
     };
@@ -267,7 +268,7 @@ mod tests {
     fn the_session_wears_the_cards_badge() {
         crate::test_util::with_temp_home(|| {
             let id = card(None);
-            link_session_to_card("sid-1", &id);
+            link_session_to_card("sid-1", &id, None);
             let links = session_links::load();
             let link = links.get("sid-1").expect("linked");
             assert_eq!(link.task_id, id);

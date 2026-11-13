@@ -306,7 +306,15 @@ impl WindowManager for Macos {
         // application "<name>" to activate` is the canonical AppleEvent
         // path and every cocoa app honors it.
         let activated = activate_via_osascript(owner);
-        raised && activated
+        // Activation alone brings the app forward, so it decides success. A
+        // failed raise may leave another of the app's windows in front.
+        if activated && !raised {
+            warn!(
+                "macos focus: AXRaise failed for cgwindow {}; app activated anyway",
+                win_id
+            );
+        }
+        activated
     }
 
     fn close(&self, pids: &[u32]) -> bool {

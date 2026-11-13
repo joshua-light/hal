@@ -61,7 +61,21 @@ pub struct Config {
 /// a session.
 fn live() -> &'static RwLock<&'static Config> {
     static CFG: OnceLock<RwLock<&'static Config>> = OnceLock::new();
-    CFG.get_or_init(|| RwLock::new(Box::leak(Box::new(load()))))
+    CFG.get_or_init(|| {
+        let (cfg, problem) = load();
+        let _ = LOAD_PROBLEM.set(problem);
+        RwLock::new(Box::leak(Box::new(cfg)))
+    })
+}
+
+static LOAD_PROBLEM: OnceLock<Option<String>> = OnceLock::new();
+
+/// What startup could not use from `config.toml`, in one line. The log file
+/// is the only other trace, and neither the TUI nor a CLI verb shows that,
+/// so both print this instead.
+pub fn load_problem() -> Option<&'static str> {
+    live();
+    LOAD_PROBLEM.get()?.as_deref()
 }
 
 pub fn get() -> &'static Config {
@@ -130,16 +144,16 @@ pub fn table_mut<'a>(
     t
 }
 
-fn load() -> Config {
+fn load() -> (Config, Option<String>) {
     let Some(path) = config_path() else {
         log::debug!("config: no home dir, using defaults");
-        return Config::default();
+        return (Config::default(), None);
     };
     let raw = match std::fs::read_to_string(&path) {
         Ok(s) => s,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             log::debug!("config: {} not found, using defaults", path.display());
-            return Config::default();
+            return (Config::default(), None);
         }
         Err(e) => {
             log::warn!(
@@ -147,23 +161,95 @@ fn load() -> Config {
                 path.display(),
                 e
             );
-            return Config::default();
+            return (
+                Config::default(),
+                Some(format!("unreadable ({e}), using defaults")),
+            );
         }
     };
-    match toml::from_str::<Config>(&raw) {
-        Ok(cfg) => {
-            log::info!("config: loaded {}", path.display());
-            cfg
+    let (cfg, problem) = parse(&raw);
+    match &problem {
+        None => log::info!("config: loaded {}", path.display()),
+        Some(p) => log::warn!("config: {}: {}", path.display(), p),
+    }
+    (cfg, problem)
+}
+
+/// The config `raw` holds, and what in it had to be left out.
+///
+/// The parse is strict, so a typo is reported rather than silently doing
+/// nothing. But a strict parse fails as a whole, and falling back to all
+/// defaults for one mistyped key drops every agent and setting the user
+/// has. So on failure the bad keys are found and left out one by one, and
+/// the rest of the file still loads.
+fn parse(raw: &str) -> (Config, Option<String>) {
+    let strict = match toml::from_str::<Config>(raw) {
+        Ok(cfg) => return (cfg, None),
+        Err(e) => e,
+    };
+    let defaults = |e: &toml::de::Error| {
+        let problem = format!("{}, using defaults", brief(e.message()));
+        (Config::default(), Some(problem))
+    };
+    let Ok(table) = raw.parse::<toml::Table>() else {
+        return defaults(&strict);
+    };
+    let (kept, ignored) = without_bad_keys(table);
+    match kept.try_into::<Config>() {
+        Ok(cfg) if !ignored.is_empty() => (cfg, Some(format!("ignored {}", ignored.join("; ")))),
+        _ => defaults(&strict),
+    }
+}
+
+/// `table` minus the keys [`Config`] rejects, and a note per key left out.
+/// A section that fails is searched one level down, so `[ui] cel_width`
+/// costs that key and `[agents.mine]` that agent, not the whole section.
+fn without_bad_keys(table: toml::Table) -> (toml::Table, Vec<String>) {
+    let alone = |section: &str, value: toml::Value| {
+        let mut t = toml::Table::new();
+        t.insert(section.to_string(), value);
+        t.try_into::<Config>()
+    };
+    let mut kept = toml::Table::new();
+    let mut ignored = Vec::new();
+    for (section, value) in table {
+        let Err(e) = alone(&section, value.clone()) else {
+            kept.insert(section, value);
+            continue;
+        };
+        let toml::Value::Table(keys) = value else {
+            ignored.push(format!("{} ({})", section, brief(e.message())));
+            continue;
+        };
+        let mut good = toml::Table::new();
+        let mut bad = Vec::new();
+        for (key, value) in keys {
+            let mut one = toml::Table::new();
+            one.insert(key.clone(), value.clone());
+            match alone(&section, toml::Value::Table(one)) {
+                Ok(_) => {
+                    good.insert(key, value);
+                }
+                Err(e) => bad.push(format!("{}.{} ({})", section, key, brief(e.message()))),
+            }
         }
-        Err(e) => {
-            log::warn!(
-                "config: parse error in {}: {} — using defaults",
-                path.display(),
-                e
-            );
-            Config::default()
+        // Still failing with every bad key gone: the section itself is the
+        // mistake, a misspelt `[uii]` say.
+        if alone(&section, toml::Value::Table(good.clone())).is_ok() {
+            kept.insert(section, toml::Value::Table(good));
+            ignored.extend(bad);
+        } else {
+            ignored.push(format!("[{}] ({})", section, brief(e.message())));
         }
     }
+    (kept, ignored)
+}
+
+/// A serde message without its "expected one of …" list, which names every
+/// field of the section and would push the key at fault off the status bar.
+fn brief(message: &str) -> &str {
+    let line = message.lines().next().unwrap_or(message);
+    line.split(", expected").next().unwrap_or(line)
 }
 
 /// Set `[table].key` in the config file, creating the file or the table as
@@ -248,6 +334,48 @@ mod tests {
         assert!(bad.is_err());
         let broken = edit_text("[ui]\nnope = 1\n", |_, _| {});
         assert!(broken.unwrap_err().contains("fix it first"));
+    }
+
+    #[test]
+    fn a_mistyped_key_costs_only_itself() {
+        let (cfg, problem) = parse(
+            r#"
+            [agents.mine]
+            kind = "claude"
+            command = "my-claude"
+            [agents.broken]
+            knid = "claude"
+            [projects]
+            default_session_agent = "mine"
+            [ui]
+            cel_width = 50
+            show_planning_column = true
+            [nonsense]
+            x = 1
+            "#,
+        );
+        assert_eq!(cfg.agents["mine"].command, "my-claude");
+        assert!(!cfg.agents.contains_key("broken"));
+        assert_eq!(cfg.default_session_agent_id(), "mine");
+        assert!(cfg.ui.show_planning_column);
+        let problem = problem.expect("reported");
+        for at_fault in ["agents.broken", "ui.cel_width", "[nonsense]"] {
+            assert!(problem.contains(at_fault), "{problem}");
+        }
+        assert!(!problem.contains("expected one of"), "{problem}");
+    }
+
+    #[test]
+    fn a_file_that_is_not_toml_falls_back_to_defaults_and_says_so() {
+        let (cfg, problem) = parse("[ui\nshow_planning_column = true");
+        assert!(!cfg.ui.show_planning_column);
+        assert!(problem.expect("reported").ends_with("using defaults"));
+    }
+
+    #[test]
+    fn a_clean_file_reports_nothing() {
+        let (_, problem) = parse("[ui]\nshow_planning_column = true");
+        assert_eq!(problem, None);
     }
 
     #[test]

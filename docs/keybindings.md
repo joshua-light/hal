@@ -138,7 +138,7 @@ Agents shows once `~/.hal/agents/` exists, unless
 | `Ctrl+T` / `/` | `/` | Find any session on disk, however old, and reopen it |
 | `Ctrl+N` / `Ins` | `n` | New session with the default agent, in this session's folder |
 | `N` | | Pick a model (and agent), then start a session in this folder |
-| `A` | | Choose the default agent until restart |
+| `A` | | Choose the default agent until restart, for new sessions and board tasks alike |
 | `Ctrl+P` | | Pick a folder, start a session there |
 | `M` | | Pick a bookmarked folder, start a session there |
 | `h` | | Mark the session for a handoff, or drop the mark: the next session you start opens with its last reply, named after it: `Plan` → `Plan (2)` → `Plan (3)` |

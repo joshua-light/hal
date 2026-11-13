@@ -253,11 +253,15 @@ impl App {
                     None,
                     false,
                 ) {
-                    Ok(name) => format!(
-                        "resumed {} [{}]",
-                        models::short_sid(&session.session_id),
-                        name
-                    ),
+                    Ok(name) => {
+                        let status = format!(
+                            "resumed {} [{}]",
+                            models::short_sid(&session.session_id),
+                            name
+                        );
+                        self.watch_resume(name, &session);
+                        status
+                    }
                     Err(e) => format!("resume failed: {}", e),
                 },
                 None => "resume failed: missing session transcript".to_string(),

@@ -14,13 +14,16 @@
 use crate::agent::AgentKind;
 use crate::config;
 use crate::conversation;
-use crate::platform::paths;
+use crate::resources;
 use crate::sessions::codex;
 use crate::sessions::common::project_name;
+use crate::sessions::pi;
 use crate::sessions::scanner;
 use crate::title;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
+
+type Accounts = BTreeMap<String, resources::Account>;
 
 /// One archived transcript, with just enough to search it and resume it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,16 +47,17 @@ pub struct IndexedSession {
 /// cwd there is nothing to resume them in.
 pub fn scan() -> Vec<IndexedSession> {
     let titles = title::load();
+    let accounts = resources::accounts();
     let enabled = config::get().enabled_agent_kinds();
     let mut out = Vec::new();
     if enabled.contains(&AgentKind::Claude) {
-        out.extend(scan_claude(&titles));
+        out.extend(scan_claude(&titles, &accounts));
     }
     if enabled.contains(&AgentKind::Pi) {
         out.extend(scan_pi(&titles));
     }
     if enabled.contains(&AgentKind::Codex) {
-        out.extend(scan_codex(&titles));
+        out.extend(scan_codex(&titles, &accounts));
     }
     out.sort_by(|a, b| {
         b.mtime_ms
@@ -83,18 +87,31 @@ fn agent_id_for(kind: AgentKind) -> Option<String> {
         .min()
 }
 
-fn scan_claude(titles: &HashMap<String, String>) -> Vec<IndexedSession> {
-    let Some(projects) = paths::claude_home().map(|d| d.join("projects")) else {
-        return Vec::new();
-    };
-    let Ok(project_dirs) = std::fs::read_dir(&projects) else {
-        return Vec::new();
-    };
+/// Claude transcripts under the default home and every Claude account home —
+/// the roots the live scan walks, so a session seen on the grid can be found
+/// again once it ages out. Each is resumed under the account that holds it.
+fn scan_claude(titles: &HashMap<String, String>, accounts: &Accounts) -> Vec<IndexedSession> {
     let scratch = scanner::scratch_project_dir_name();
     let mut out = Vec::new();
+    for home in resources::claude_roots() {
+        let Ok(project_dirs) = std::fs::read_dir(home.join("projects")) else {
+            continue;
+        };
+        scan_claude_projects(project_dirs, scratch.as_deref(), titles, accounts, &mut out);
+    }
+    out
+}
+
+fn scan_claude_projects(
+    project_dirs: std::fs::ReadDir,
+    scratch: Option<&str>,
+    titles: &HashMap<String, String>,
+    accounts: &Accounts,
+    out: &mut Vec<IndexedSession>,
+) {
     for proj in project_dirs.flatten() {
         // The titler's one-shot `hal-new -p` runs are not real sessions.
-        if scratch.as_deref() == proj.file_name().to_str() {
+        if scratch == proj.file_name().to_str() {
             continue;
         }
         let Ok(files) = std::fs::read_dir(proj.path()) else {
@@ -120,7 +137,9 @@ fn scan_claude(titles: &HashMap<String, String>) -> Vec<IndexedSession> {
             let first_message = conversation::extract_first_user_message(&head)
                 .or_else(|| conversation::read_first_user_message(&path));
             out.push(IndexedSession {
-                agent_id: "claude".into(),
+                agent_id: resources::owner(accounts, AgentKind::Claude, &path)
+                    .unwrap_or("claude")
+                    .into(),
                 agent_kind: AgentKind::Claude,
                 title: titles.get(&session_id).cloned(),
                 session_id,
@@ -132,25 +151,14 @@ fn scan_claude(titles: &HashMap<String, String>) -> Vec<IndexedSession> {
             });
         }
     }
-    out
 }
 
 fn scan_pi(titles: &HashMap<String, String>) -> Vec<IndexedSession> {
     let Some(agent_id) = agent_id_for(AgentKind::Pi) else {
         return Vec::new();
     };
-    let Some(dir) = paths::pi_sessions_dir() else {
-        return Vec::new();
-    };
-    let Ok(files) = std::fs::read_dir(&dir) else {
-        return Vec::new();
-    };
     let mut out = Vec::new();
-    for entry in files.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
-            continue;
-        }
+    for path in pi::transcripts() {
         let head = conversation::read_jsonl_head(&path, 4096);
         let Some(cwd) = conversation::extract_cwd(&head) else {
             continue;
@@ -173,15 +181,17 @@ fn scan_pi(titles: &HashMap<String, String>) -> Vec<IndexedSession> {
     out
 }
 
-fn scan_codex(titles: &HashMap<String, String>) -> Vec<IndexedSession> {
+/// Codex rollouts under the default sessions directory and every Codex
+/// account's, each resumed under the account that holds it.
+fn scan_codex(titles: &HashMap<String, String>, accounts: &Accounts) -> Vec<IndexedSession> {
     let Some(agent_id) = agent_id_for(AgentKind::Codex) else {
         return Vec::new();
     };
-    let Some(root) = paths::codex_sessions_dir() else {
-        return Vec::new();
-    };
     let mut out = Vec::new();
-    for (path, _) in codex::walk_rollouts(&root) {
+    let rollouts = resources::codex_roots()
+        .into_iter()
+        .flat_map(|root| codex::walk_rollouts(&root));
+    for (path, _) in rollouts {
         let head = codex::read_head(&path);
         let Some(cwd) = conversation::codex::extract_cwd(&head) else {
             continue;
@@ -192,7 +202,9 @@ fn scan_codex(titles: &HashMap<String, String>) -> Vec<IndexedSession> {
             continue;
         };
         out.push(IndexedSession {
-            agent_id: agent_id.clone(),
+            agent_id: resources::owner(accounts, AgentKind::Codex, &path)
+                .unwrap_or(&agent_id)
+                .into(),
             agent_kind: AgentKind::Codex,
             title: titles.get(&session_id).cloned(),
             session_id,
@@ -315,6 +327,77 @@ mod tests {
                 .first_message
                 .as_deref()
                 .is_some_and(|m| m.starts_with("long pasted prompt")));
+        });
+    }
+
+    #[test]
+    fn scan_indexes_pi_transcripts_under_their_project_dirs() {
+        with_temp_home(|home| {
+            fs::create_dir_all(home.join(".hal")).unwrap();
+            // An account is the one way to enable a kind without touching
+            // the process-wide config.
+            fs::write(
+                home.join(".hal/resources.toml"),
+                "[accounts.pi]\nprovider = \"pi\"\n",
+            )
+            .unwrap();
+            let proj = home.join(".pi/agent/sessions/--tmp-pi--");
+            fs::create_dir_all(&proj).unwrap();
+            fs::write(
+                proj.join("2026-01-01T00-00-00-000Z_sid-pi.jsonl"),
+                "{\"type\":\"session\",\"id\":\"sid-pi\",\"cwd\":\"/tmp/pi\"}\n",
+            )
+            .unwrap();
+
+            let index = scan();
+            let pi = index
+                .iter()
+                .find(|s| s.agent_kind == AgentKind::Pi)
+                .expect("pi transcript indexed");
+            assert_eq!(pi.session_id, "sid-pi");
+            assert_eq!(pi.cwd, "/tmp/pi");
+            assert_eq!(pi.agent_id, "pi");
+        });
+    }
+
+    #[test]
+    fn scan_indexes_extra_account_homes_under_their_account() {
+        with_temp_home(|home| {
+            fs::create_dir_all(home.join(".hal")).unwrap();
+            fs::write(
+                home.join(".hal/resources.toml"),
+                "[accounts.work]\nprovider = \"claude\"\nhome = \"~/.claude-work\"\n\
+                 [accounts.cdx]\nprovider = \"codex\"\nhome = \"~/.codex-work\"\n",
+            )
+            .unwrap();
+            write_claude_jsonl(home, "-tmp-main", "sid-main", "/tmp/main", "default home");
+            let work = home.join(".claude-work/projects/-tmp-work");
+            fs::create_dir_all(&work).unwrap();
+            fs::write(
+                work.join("sid-work.jsonl"),
+                "{\"type\":\"user\",\"cwd\":\"/tmp/work\",\
+                 \"message\":{\"role\":\"user\",\"content\":\"account home\"}}\n",
+            )
+            .unwrap();
+            let rollouts = home.join(".codex-work/sessions/2026/07/14");
+            fs::create_dir_all(&rollouts).unwrap();
+            fs::write(
+                rollouts
+                    .join("rollout-2026-07-14T16-22-22-019f60ca-f883-7a10-a997-5c17d556ee79.jsonl"),
+                "{\"type\":\"session_meta\",\"payload\":{\"session_id\":\"sid-cdx\",\"cwd\":\"/tmp/cdx\"}}\n",
+            )
+            .unwrap();
+
+            let index = scan();
+            let agent_of = |sid: &str| {
+                index
+                    .iter()
+                    .find(|s| s.session_id == sid)
+                    .map(|s| s.agent_id.as_str())
+            };
+            assert_eq!(agent_of("sid-main"), Some("claude"));
+            assert_eq!(agent_of("sid-work"), Some("work"));
+            assert_eq!(agent_of("sid-cdx"), Some("cdx"));
         });
     }
 

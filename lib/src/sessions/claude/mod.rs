@@ -22,15 +22,11 @@ use paths::{claude_dir, is_scratch_cwd, sessions_dir};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-/// Seconds since `path` was last modified, or `None` if stat fails.
+/// Seconds since `path` was last modified, or `None` if stat fails. A live
+/// transcript's mtime can lead the wall clock; that counts as age 0.
 fn mtime_age_secs(path: &Path) -> Option<u64> {
-    path.metadata()
-        .ok()?
-        .modified()
-        .ok()?
-        .elapsed()
-        .ok()
-        .map(|d| d.as_secs())
+    let mtime = path.metadata().ok()?.modified().ok()?;
+    Some(mtime.elapsed().map_or(0, |d| d.as_secs()))
 }
 
 /// Check if a process has a real parent (not reparented to init).
@@ -192,17 +188,10 @@ fn reconcile_with_session_status(
 /// Claude sessions under the default home and every extra Claude account home.
 pub(super) fn scan(titles: &HashMap<String, String>) -> Vec<SessionInfo> {
     let default_home = claude_dir();
-    let mut extra_homes: Vec<PathBuf> = Vec::new();
-    for account in crate::resources::accounts()
-        .values()
-        .filter(|a| a.provider == AgentKind::Claude)
-    {
-        if let Some(home) = account.home() {
-            if Some(&home) != default_home.as_ref() && !extra_homes.contains(&home) {
-                extra_homes.push(home);
-            }
-        }
-    }
+    let extra_homes: Vec<PathBuf> = crate::resources::claude_roots()
+        .into_iter()
+        .filter(|home| Some(home) != default_home.as_ref())
+        .collect();
     scan_homes(&extra_homes, titles)
 }
 
@@ -440,6 +429,15 @@ fn scan_claude_sessions(titles: &HashMap<String, String>) -> Vec<SessionInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_future_mtime_ages_as_zero() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let ahead = std::time::SystemTime::now() + std::time::Duration::from_secs(3_600);
+        tmp.as_file().set_modified(ahead).unwrap();
+        assert_eq!(mtime_age_secs(tmp.path()), Some(0));
+        assert_eq!(mtime_age_secs(Path::new("/no/such/transcript.jsonl")), None);
+    }
 
     // While an AskUserQuestion / permission prompt is open, Claude Code sets
     // the session file's status to "waiting" but hasn't yet written the

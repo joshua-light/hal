@@ -1,8 +1,6 @@
 use super::{content_text, message_role, message_timestamp};
-use crate::conversation::render::truncate_plain;
-use crate::conversation::{
-    full_text, NO_CONTENT, NO_TEXT_CONTENT, THINKING_MARKER, TOOL_MARKER_PREFIX,
-};
+use crate::conversation::render::{tool_marker, truncate_plain};
+use crate::conversation::{full_text, NO_CONTENT, NO_TEXT_CONTENT, THINKING_MARKER};
 use crate::models::ConversationMessage;
 use serde_json::Value;
 
@@ -125,9 +123,7 @@ fn extract_text_content(entry: &Value) -> String {
                             parts.push(truncate_plain(text, 200));
                         }
                     }
-                    Some("toolCall") => {
-                        parts.push(format!("{}{}]", TOOL_MARKER_PREFIX, tool_display(block)));
-                    }
+                    Some("toolCall") => parts.push(tool_display(block)),
                     Some("thinking") => parts.push(THINKING_MARKER.to_string()),
                     _ => {}
                 }
@@ -150,21 +146,8 @@ fn extract_text_content(entry: &Value) -> String {
 
 fn tool_display(block: &Value) -> String {
     let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("?");
-    let Some(raw) = block.get("arguments").and_then(|a| tool_brief_arg(name, a)) else {
-        return name.to_string();
-    };
-    let cleaned = raw.replace(']', ")");
-    let brief: String = cleaned.split_whitespace().collect::<Vec<_>>().join(" ");
-    let end = brief
-        .char_indices()
-        .nth(60)
-        .map(|(i, _)| i)
-        .unwrap_or(brief.len());
-    if end < brief.len() {
-        format!("{}({}…)", name, &brief[..end])
-    } else {
-        format!("{}({})", name, brief)
-    }
+    let raw = block.get("arguments").and_then(|a| tool_brief_arg(name, a));
+    tool_marker(name, raw.as_deref())
 }
 
 fn tool_brief_arg(name: &str, args: &Value) -> Option<String> {
@@ -309,6 +292,32 @@ mod tests {
             "tool preview should name the tool, got {:?}",
             msgs[0].content_preview
         );
+    }
+
+    #[test]
+    fn tool_marker_matches_claude() {
+        let claude = |input: Value| {
+            crate::conversation::render::extract_text_content(&json!({
+                "type": "assistant",
+                "message": {"content": [{"type": "tool_use", "name": "Bash", "input": input}]},
+            }))
+        };
+        let pi = |args: Value| {
+            extract_text_content(&assistant(
+                "toolUse",
+                json!([tool_call("t1", "Bash", args)]),
+            ))
+        };
+        let long = "ls ".to_string() + &"文档".repeat(40);
+        for command in [long.as_str(), " \n ", "echo hi"] {
+            assert_eq!(
+                pi(json!({"command": command})),
+                claude(json!({"command": command})),
+                "command {:?}",
+                command
+            );
+        }
+        assert_eq!(pi(json!({"command": " "})), "[tool: Bash]");
     }
 
     // --- extract_token_totals ---

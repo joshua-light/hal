@@ -120,6 +120,11 @@ impl App {
             }
         }
         let what = if on { "on" } else { "off" };
+        let changed = new_spec.is_some() || (on && held);
+        if !changed {
+            self.set_status(format!("{}: already {}", name, what));
+            return true;
+        }
         harness::log_event(&dir, "info", format!("turned {} from the hub", what));
         // Reflect it now; the next disk scan confirms it.
         if let Some(a) = self.harness.selected_mut() {
@@ -181,6 +186,16 @@ mod tests {
             assert_eq!(status(&app), "bb-prs: on");
             let log = crate::harness::read_events(&dir, 10);
             assert_eq!(log[0].text, "turned on from the hub");
+        });
+    }
+
+    #[test]
+    fn setting_the_state_it_already_has_logs_nothing() {
+        crate::test_util::with_temp_home(|| {
+            let (mut app, _rt, dir) = app_with_agent();
+            assert!(app.harness_set_on(true));
+            assert_eq!(status(&app), "bb-prs: already on");
+            assert!(crate::harness::read_events(&dir, 10).is_empty());
         });
     }
 
