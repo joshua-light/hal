@@ -3,6 +3,9 @@
 //! that kills the attach child after a deadline — that EOFs the master and
 //! the reader thread exits cleanly.
 
+mod common;
+
+use common::{private_tmux_server, tmux_available};
 use hal_lib::platform::mux;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use std::io::Read;
@@ -17,23 +20,13 @@ impl Drop for SessionGuard {
     }
 }
 
-/// The mux shim is driven through the `tmux` binary (psmux's `tmux.exe` shim
-/// on Windows). Skip the smoke test silently when it's not on `PATH` so the
-/// suite stays passable on bare CI images.
-fn tmux_available() -> bool {
-    std::process::Command::new("tmux")
-        .arg("-V")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
-}
-
 #[test]
 fn pane_attach_delivers_bytes() {
     if !tmux_available() {
         eprintln!("pane_attach_delivers_bytes: tmux not on PATH, skipping");
         return;
     }
+    let _tmux = private_tmux_server();
     let name = format!("hal-pane-raw-{}", std::process::id());
     let cwd = std::env::current_dir()
         .map(|p| p.to_string_lossy().into_owned())
@@ -122,6 +115,7 @@ fn embedded_pane_captures_osc52_copy() {
         eprintln!("embedded_pane_captures_osc52_copy: tmux not on PATH, skipping");
         return;
     }
+    let _tmux = private_tmux_server();
     let name = format!("hal-pane-osc52-{}", std::process::id());
     let cwd = std::env::current_dir()
         .map(|p| p.to_string_lossy().into_owned())
@@ -205,6 +199,7 @@ fn embedded_pane_switches_sessions() {
         eprintln!("embedded_pane_switches_sessions: tmux not on PATH, skipping");
         return;
     }
+    let _tmux = private_tmux_server();
     let from = format!("hal-pane-from-{}", std::process::id());
     let to = format!("hal-pane-to-{}", std::process::id());
     let cwd = std::env::current_dir()

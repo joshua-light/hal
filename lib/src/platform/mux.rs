@@ -42,11 +42,28 @@ fn spawn_detached_impl(name: &str, cwd: &str, initial_cmd: Option<&str>) -> io::
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
     let shell_cmd = match initial_cmd {
         Some(cmd) => initial_shell_cmd(&shell, cmd),
-        None => shell,
+        None => format!("exec {}", shell),
     };
+    let shell_cmd = in_dir(cwd, &shell_cmd);
     let args = ["new-session", "-d", "-s", name, "-c", cwd, &shell_cmd];
     info!("spawn: {} {}", MUX_BIN, args.join(" "));
     run(&args, "new-session")
+}
+
+/// Prefix `shell_cmd` with a `cd` into `cwd`.
+///
+/// `new-session -c` alone is not enough. A tmux server whose own working
+/// directory has been deleted starts every new pane in that dead directory
+/// and ignores `-c` (seen on tmux 3.8). Claude Code refuses to start there,
+/// so each spawn died at once with nothing on screen to say why. Any server
+/// started from a temp directory ends up in this state once the directory is
+/// cleaned.
+///
+/// `;` rather than `&&`: when `cwd` itself is gone the command still runs,
+/// wherever tmux put the pane, as it did before.
+#[cfg_attr(windows, allow(dead_code))] // Windows never builds a shell command.
+fn in_dir(cwd: &str, shell_cmd: &str) -> String {
+    format!("cd -- {}; {}", super::terminal::shell_quote(cwd), shell_cmd)
 }
 
 /// Shell invocation that runs a detached pane's inaugural command.
@@ -462,7 +479,17 @@ fn run(args: &[&str], label: &str) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{initial_shell_cmd, pane_content_shows_empty_input};
+    use super::{in_dir, initial_shell_cmd, pane_content_shows_empty_input};
+
+    // The directory is quoted as one token, and a failed `cd` must not stop
+    // the command — hence `;`.
+    #[test]
+    fn in_dir_quotes_the_directory_and_keeps_the_command_unconditional() {
+        assert_eq!(
+            in_dir("/tmp/it's here", "exec /bin/zsh"),
+            r"cd -- '/tmp/it'\''s here'; exec /bin/zsh"
+        );
+    }
 
     // The rc-prompt guard must precede the shell so zsh imports it as a
     // parameter before .zshrc (and omz's update check) runs, and the command
