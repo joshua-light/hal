@@ -896,7 +896,10 @@ def execution(worker, cfg):
         if settings_path.is_file():
             existing = tomllib.loads(settings_path.read_text()).get('hooks', {}).get('PreToolUse', [])
         entry = toml_value(existing + hooks['PreToolUse'])
-        argv += ['-m', profile['model'], '-c', 'model_reasoning_effort=' + json.dumps(profile['effort']),
+        # Inline, the transcript is tmux scrollback, so the wheel scrolls it; the
+        # alternate screen keeps no history and Codex never asks for the mouse.
+        argv += ['--no-alt-screen',
+                 '-m', profile['model'], '-c', 'model_reasoning_effort=' + json.dumps(profile['effort']),
                  '-c', 'features.hooks=true', '-c', 'hooks.PreToolUse=' + entry, prompt]
     return argv, env
 

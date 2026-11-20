@@ -28,6 +28,12 @@ fn prefix_env(var: &str, value: &str, cmd: &str, windows: bool) -> String {
     }
 }
 
+/// Keeps Codex out of the alternate screen. There it asks the terminal to turn
+/// the wheel into arrow keys (`?1007`), which the multiplexer doesn't do, and
+/// the pane keeps no history, so the wheel does nothing. Inline, the transcript
+/// is the pane's own scrollback and the wheel scrolls it.
+const CODEX_INLINE: &str = "--no-alt-screen";
+
 pub(super) fn build_agent_command(
     agent: &AgentConfig,
     tmux_name: &str,
@@ -161,6 +167,8 @@ pub(super) fn build_agent_command(
             // and a resumed session restores its own model — so `-m` applies to
             // fresh sessions only. Any fixed flags (e.g. reasoning effort) live
             // in `agent.command` from config and are already in `cmd`.
+            cmd.push(' ');
+            cmd.push_str(CODEX_INLINE);
             match target {
                 Some(SessionTarget::Resume(sid)) => {
                     cmd.push_str(" resume ");
@@ -351,7 +359,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             cmd,
-            "codex -c model_reasoning_effort=high -m 'gpt-5.6-luna' 'do the thing'"
+            "codex -c model_reasoning_effort=high --no-alt-screen -m 'gpt-5.6-luna' 'do the thing'"
         );
     }
 
@@ -443,7 +451,7 @@ mod tests {
             false,
         )
         .unwrap();
-        assert_eq!(cmd, "codex resume '019f60ca-uuid'");
+        assert_eq!(cmd, "codex --no-alt-screen resume '019f60ca-uuid'");
     }
 
     #[test]
