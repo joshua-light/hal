@@ -33,7 +33,7 @@ const MUX_BIN: &str = "tmux";
 pub fn spawn_detached(name: &str, cwd: &str, initial_cmd: Option<&str>) -> io::Result<()> {
     spawn_detached_impl(name, cwd, initial_cmd)?;
     enable_mouse(name);
-    configure_clipboard();
+    configure_server();
     Ok(())
 }
 
@@ -265,6 +265,29 @@ pub fn paste_buffer(session: &str, text: &str) -> io::Result<()> {
     }
 }
 
+/// The server-wide options the hub depends on. Server options outlive any
+/// one session, so setting them again per spawn is harmless, and it is what
+/// covers a tmux server that restarted under the hub.
+pub fn configure_server() {
+    configure_clipboard();
+    configure_extended_keys();
+}
+
+/// Let modified keys that have no legacy encoding reach the panes, and
+/// Shift+Enter above all: Claude Code takes it as a newline, plain Enter
+/// as submit. With `extended-keys off` (the default) tmux reads the
+/// attach client's `CSI 13;2u` and hands the pane a bare Enter. `on` makes
+/// it pass the modified key on to every application that asks for
+/// extended keys, and leaves the ones that don't ask untouched.
+fn configure_extended_keys() {
+    if let Err(e) = run(
+        &["set-option", "-s", "extended-keys", "on"],
+        "set-option extended-keys",
+    ) {
+        warn!("configure_extended_keys: {}", e);
+    }
+}
+
 /// Wire tmux's `copy-command` (a server option, tmux 3.2+) to the same
 /// copy pipeline hal uses — OSC 52 forward to attached clients plus the
 /// host-clipboard fallback chain — so a mouse-drag selection in an embedded
@@ -273,7 +296,7 @@ pub fn paste_buffer(session: &str, text: &str) -> io::Result<()> {
 /// over ssh. Best-effort — server-wide, clobbers any pre-existing
 /// `copy-command`; users who want different behaviour can re-set it in
 /// their tmux.conf after hal spawns a session.
-pub fn configure_clipboard() {
+fn configure_clipboard() {
     // `set-clipboard external` (the default) makes tmux DROP OSC 52 escapes
     // emitted by applications inside it. When hal itself runs in a tmux
     // pane — the usual shape for a long-lived hub driven over ssh — its

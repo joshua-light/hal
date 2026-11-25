@@ -32,7 +32,7 @@ pub(super) fn encode_key(key: KeyEvent) -> Vec<u8> {
             }
             out
         }
-        KeyCode::Enter => vec![b'\r'],
+        KeyCode::Enter => csi_u(b'\r', &key.modifiers),
         KeyCode::Tab => {
             if shift {
                 b"\x1b[Z".to_vec()
@@ -83,6 +83,18 @@ fn csi_arrow(letter: u8, mods: &KeyModifiers) -> Vec<u8> {
     }
 }
 
+/// A key whose legacy byte can't carry modifiers, as the CSI u sequence
+/// tmux's client parser reads (`CSI 13;2u` for Shift+Enter). Unmodified,
+/// it stays the legacy byte every application understands.
+fn csi_u(legacy: u8, mods: &KeyModifiers) -> Vec<u8> {
+    let m = modifier_code(mods);
+    if m == 1 {
+        vec![legacy]
+    } else {
+        format!("\x1b[{};{}u", legacy, m).into_bytes()
+    }
+}
+
 fn csi_tilde(code: u8, mods: &KeyModifiers) -> Vec<u8> {
     let m = modifier_code(mods);
     if m == 1 {
@@ -128,5 +140,29 @@ fn function_key(n: u8) -> Vec<u8> {
         11 => b"\x1b[23~".to_vec(),
         12 => b"\x1b[24~".to_vec(),
         _ => Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn enter(modifiers: KeyModifiers) -> Vec<u8> {
+        encode_key(KeyEvent::new(KeyCode::Enter, modifiers))
+    }
+
+    #[test]
+    fn plain_enter_stays_carriage_return() {
+        assert_eq!(enter(KeyModifiers::NONE), b"\r");
+    }
+
+    #[test]
+    fn shift_enter_keeps_its_modifier() {
+        assert_eq!(enter(KeyModifiers::SHIFT), b"\x1b[13;2u");
+    }
+
+    #[test]
+    fn ctrl_enter_keeps_its_modifier() {
+        assert_eq!(enter(KeyModifiers::CONTROL), b"\x1b[13;5u");
     }
 }

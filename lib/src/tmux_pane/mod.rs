@@ -55,8 +55,8 @@ impl TmuxPaneView {
         // Server-wide options: once per hub is enough. A tmux server that
         // restarts under the hub gets them again from the next session the
         // hub spawns (`mux::spawn_detached`).
-        static CLIPBOARD: Once = Once::new();
-        CLIPBOARD.call_once(crate::platform::mux::configure_clipboard);
+        static SERVER_OPTIONS: Once = Once::new();
+        SERVER_OPTIONS.call_once(crate::platform::mux::configure_server);
 
         let pty_system = native_pty_system();
         let pair = pty_system
