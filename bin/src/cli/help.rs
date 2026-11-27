@@ -32,7 +32,8 @@ const GENERAL_HELP: &str = r#"hal
 
 Usage:
   hal                         Start the TUI
-  hal --no-tui                Print discovered sessions
+  hal --no-tui [--json]       Print discovered sessions, with their titles;
+                              --json: one object per line, keyed by session_id
   hal help [topic]            Show CLI help
   hal keys [ide|vim]          List every key and the name to rebind it by
 

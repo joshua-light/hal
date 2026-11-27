@@ -67,7 +67,7 @@ function hal-new { claude --dangerously-skip-permissions @args }
 ```sh
 cargo build --release
 target/release/hal            # the TUI
-target/release/hal --no-tui   # print discovered sessions and exit
+target/release/hal --no-tui   # print discovered sessions and exit (--json: one object each)
 ```
 
 Logs go to `$XDG_CACHE_HOME/hal/` (Linux), `~/Library/Caches/hal/`

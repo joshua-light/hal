@@ -12,6 +12,7 @@
 //! - [`dir_cache`] — per-directory listing cache for the orphan/inactive walks.
 //! - [`index`] — the session archive: every transcript on disk, however old.
 //! - [`count`] — sessions created today and this week.
+//! - [`listing`] — a session as `hal --no-tui` prints it, as text or JSON.
 //! - [`watcher`] — filesystem watcher that signals a rescan.
 
 mod claude;
@@ -20,6 +21,7 @@ mod common;
 pub mod count;
 pub mod dir_cache;
 pub mod index;
+pub mod listing;
 pub mod pi;
 pub mod pi_bridge;
 pub mod scanner;

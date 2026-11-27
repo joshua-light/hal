@@ -9,8 +9,9 @@
 //! - `workers`, `scan_msg`: background tasks and the messages they send.
 //! - `titles`: background session titling.
 
+use hal_lib::sessions::listing::Listing;
 use hal_lib::sessions::scanner;
-use hal_lib::{models, title};
+use hal_lib::title;
 use std::io;
 
 mod args;
@@ -37,7 +38,7 @@ async fn main() -> io::Result<()> {
         std::process::exit(code);
     }
     if argv.iter().any(|a| a == "--no-tui") {
-        return run_no_tui();
+        return run_no_tui(argv.iter().any(|a| a == "--json"));
     }
 
     let log_path = logging::init_logging();
@@ -62,20 +63,18 @@ async fn main() -> io::Result<()> {
     result
 }
 
-fn run_no_tui() -> io::Result<()> {
+fn run_no_tui(json: bool) -> io::Result<()> {
     let sessions = scanner::scan_sessions();
     for s in &sessions {
-        let last_msg = s.last_user_message.as_deref().unwrap_or("");
-        println!(
-            "{:>7}:{} [{:<17}] {:<10} {:<24} {}",
-            s.pid,
-            models::short_sid(&s.session_id),
-            s.state,
-            s.agent_badge(),
-            s.project_name,
-            last_msg
-        );
+        let listing = Listing(s);
+        if json {
+            println!("{}", listing.json());
+        } else {
+            println!("{}", listing.text());
+        }
     }
-    println!("— {} sessions —", sessions.len());
+    if !json {
+        println!("— {} sessions —", sessions.len());
+    }
     Ok(())
 }
