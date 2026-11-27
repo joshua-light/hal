@@ -14,6 +14,9 @@ use crate::platform::paths::expand_home;
 /// therefore a percentage of this floor.
 pub const AUTOCOMPACT_FLOOR: u64 = 100_000;
 
+/// Above 100 the window is raised through `--autocompact` itself, up to its 1M cap.
+pub const MAX_WINDOW_PCT: u16 = 1000;
+
 /// Replaces Claude Code's preset entirely. The preset carries coding guidance
 /// and environment context an unattended worker does not need (~1.8k
 /// tokens). Dropping it drops its safety instructions too, so the essentials
@@ -103,8 +106,8 @@ pub struct RunCfg {
     pub tools: Vec<String>,
     pub model: Option<String>,
     pub effort: Option<String>,
-    /// Percentage of [`AUTOCOMPACT_FLOOR`]: 8 → ~8k, 32 → ~32k.
-    pub window_pct: u8,
+    /// Percentage of [`AUTOCOMPACT_FLOOR`]: 8 → ~8k, 32 → ~32k, 300 → ~300k.
+    pub window_pct: u16,
     pub max_turns: Option<u32>,
     /// Cap for one tick.
     pub max_budget_usd: Option<f64>,
@@ -231,6 +234,16 @@ impl Spec {
         AUTOCOMPACT_FLOOR * self.run.window_pct as u64 / 100
     }
 
+    /// What `--autocompact` is given: the floor, or the window itself once it is above it.
+    pub fn autocompact_tokens(&self) -> u64 {
+        self.approx_window_tokens().max(AUTOCOMPACT_FLOOR)
+    }
+
+    /// The override can only lower the trigger, so a window above the floor leaves it at 100.
+    pub fn autocompact_pct(&self) -> u16 {
+        self.run.window_pct.min(100)
+    }
+
     /// One-line trigger description for cards: `poll 5m`, `every 6h`,
     /// `inbox`, and what wakes it early: `poll 5m ← board`.
     pub fn trigger_label(&self) -> String {
@@ -272,8 +285,8 @@ pub fn parse(dir: &Path, raw: &str) -> Result<Spec, String> {
         .or_else(|| dir.file_name().map(|n| n.to_string_lossy().into_owned()))
         .ok_or("agent.toml: cannot derive a name")?;
 
-    if !(1..=100).contains(&file.run.window_pct) {
-        return Err("run.window_pct must be 1–100".into());
+    if !(1..=MAX_WINDOW_PCT).contains(&file.run.window_pct) {
+        return Err(format!("run.window_pct must be 1–{MAX_WINDOW_PCT}"));
     }
     if !PERMISSION_MODES.contains(&file.run.permission_mode.as_str()) {
         return Err(format!(

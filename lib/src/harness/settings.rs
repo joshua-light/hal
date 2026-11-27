@@ -4,7 +4,7 @@
 //! supervisor would refuse. The supervisor reloads the spec every loop, so a
 //! saved change applies on the next run without a restart.
 
-use super::spec::{self, fmt_secs, Spec, TriggerKind, AUTOCOMPACT_FLOOR, PERMISSION_MODES};
+use super::spec::{self, fmt_secs, Spec, TriggerKind, MAX_WINDOW_PCT, PERMISSION_MODES};
 use std::path::Path;
 use toml_edit::{Array, DocumentMut, Item, Value};
 
@@ -83,7 +83,7 @@ impl Setting {
             Setting::RunBudget => "A run stops once it has spent this much. Type dollars, like 0.50; empty means no limit.",
             Setting::DailyBudget => "Reaching it halts the agent until tomorrow (UTC). Empty means no limit.",
             Setting::TotalBudget => "Reaching it halts the agent for good. Empty means no limit.",
-            Setting::Window => "Context before autocompact kicks in. Type a size like 32k, up to 100k; bigger costs more per turn.",
+            Setting::Window => "Context before autocompact kicks in. Type a size like 32k, up to 1000k; bigger costs more per turn.",
             Setting::Session => "Fresh starts clean each run. Persistent resumes one session — about 5× the cost.",
             Setting::Permissions => "Enter cycles the CLI's modes. dontAsk denies whatever tools doesn't allow.",
             Setting::Tools => "Comma-separated: Read, Bash(git *), mcp__server__*. Anything else is denied.",
@@ -251,8 +251,10 @@ impl Setting {
             Setting::Window => {
                 let n = s.trim_end_matches(['k', 'K']).trim();
                 match n.parse::<u64>() {
-                    Ok(k) if (1..=100).contains(&k) => Ok(Some((k as i64).into())),
-                    _ => Err(format!("context window: 1k–{}k", AUTOCOMPACT_FLOOR / 1000)),
+                    Ok(k) if (1..=MAX_WINDOW_PCT as u64).contains(&k) => {
+                        Ok(Some((k as i64).into()))
+                    }
+                    _ => Err(format!("context window: 1k–{MAX_WINDOW_PCT}k")),
                 }
             }
             Setting::Tools => {

@@ -5,7 +5,7 @@
 //! else. The CLI is driven as a subprocess (not the SDK) because it reuses
 //! the machine's existing credentials.
 
-use super::spec::{Spec, AUTOCOMPACT_FLOOR};
+use super::spec::Spec;
 use super::tools;
 use log::warn;
 use std::fs;
@@ -88,7 +88,7 @@ pub fn build_args(
         "--system-prompt-file".into(),
         prompt_file.display().to_string(),
         "--autocompact".into(),
-        AUTOCOMPACT_FLOOR.to_string(),
+        spec.autocompact_tokens().to_string(),
         // Never a prompt: an unattended tick has nobody to ask.
         "--permission-mode".into(),
         spec.run.permission_mode.clone(),
@@ -172,7 +172,7 @@ pub fn run(
         .current_dir(&spec.workdir)
         .env(
             "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE",
-            spec.run.window_pct.to_string(),
+            spec.autocompact_pct().to_string(),
         )
         .env("HAL_AGENT", &spec.name)
         .env("HAL_AGENT_DIR", &spec.dir)
