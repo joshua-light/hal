@@ -15,6 +15,6 @@ edition = "2021"
 ratatui = { version = "0.30", features = ["unstable-rendered-line-info"] }
 crossterm = "0.29"
 tokio = { version = "1", features = ["full"] }
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 log = "0.4"
 simplelog = "0.12"

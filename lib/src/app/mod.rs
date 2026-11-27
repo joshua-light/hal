@@ -91,6 +91,7 @@ pub struct App {
     pub pending_close: Option<PendingClose>,
     pub usage: Option<UsageInfo>,
     pub usage_line: Line<'static>,
+    pub spend_line: Line<'static>,
     pub session_counts: SessionCounts,
     /// Edit buffer of the inline rename, prefilled with the current title.
     pub rename_buffer: String,
@@ -202,6 +203,7 @@ impl App {
             pending_close: None,
             usage: None,
             usage_line: Line::default(),
+            spend_line: Line::default(),
             session_counts: SessionCounts::default(),
             rename_buffer: String::new(),
             rename_target: None,
@@ -240,6 +242,10 @@ impl App {
     pub fn update_usage(&mut self, usage: UsageInfo, rendered: Line<'static>) {
         self.usage = Some(usage);
         self.usage_line = rendered;
+    }
+
+    pub fn update_spend(&mut self, rendered: Line<'static>) {
+        self.spend_line = rendered;
     }
 
     pub fn update_session_counts(&mut self, counts: SessionCounts) {

@@ -102,6 +102,7 @@ cover the runtime.
 | Session-to-task links | `~/.hal/session-tasks.json` | `tasks::session_links` |
 | Acks, holds, bookmarks | `~/.hal/acks.json`, `holds.json`, `bookmarks.json` | `acks`, `holds`, `bookmarks` |
 | Usage readings | `~/.hal/usage.json` | `usage` |
+| This week's spend | `~/.hal/spend.json` | `spend` |
 | Persistent agents | `~/.hal/agents/<name>/` | `harness` |
 | Wakes | `~/.hal/wake/<name>` | `wake` |
 | Accounts, resources | `~/.hal/resources.toml`; broker state in `~/.hal/resources/` | broker, `resources` |

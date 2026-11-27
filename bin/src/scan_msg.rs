@@ -1,7 +1,7 @@
 use crate::titles::Titles;
 use hal_lib::app::App;
 use hal_lib::sessions::count;
-use hal_lib::{harness, metrics, models, ui, usage};
+use hal_lib::{config, harness, metrics, models, spend, ui, usage};
 
 /// A background worker's result, drained by the event loop between frames.
 pub(crate) enum ScanMsg {
@@ -11,6 +11,7 @@ pub(crate) enum ScanMsg {
     SessionIndex(Vec<hal_lib::sessions::index::IndexedSession>),
     Detail(models::SessionDetail),
     Usage(usage::UsageInfo),
+    Spend(spend::Spend),
     SessionCounts(count::SessionCounts),
     Metrics(metrics::MetricsAnalysis),
     TaskStats(Vec<(String, hal_lib::tasks::stats::TaskStats)>),
@@ -53,6 +54,10 @@ pub(crate) fn apply_scan_msg(app: &mut App, msg: ScanMsg, titles: &Titles) -> bo
         ScanMsg::Usage(u) => {
             let line = ui::build_usage_line(&u);
             app.update_usage(u, line);
+        }
+        ScanMsg::Spend(s) => {
+            let budget_usd = config::get().spend.weekly_budget_usd;
+            app.update_spend(ui::build_spend_line(&s, budget_usd));
         }
         ScanMsg::SessionCounts(c) => {
             app.update_session_counts(c);

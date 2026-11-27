@@ -437,7 +437,7 @@ fn clamp_pct(v: f64) -> u8 {
     v.clamp(0.0, 100.0) as u8
 }
 
-fn now() -> u64 {
+pub(crate) fn now() -> u64 {
     crate::persist::now_unix_secs().max(0) as u64
 }
 

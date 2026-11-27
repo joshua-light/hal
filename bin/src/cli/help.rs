@@ -21,6 +21,7 @@ fn help_text(topic: Option<&str>) -> Option<&'static str> {
         Some("agent") => AGENT_HELP,
         Some("board") => BOARD_HELP,
         Some("resource") => RESOURCE_HELP,
+        Some("spend") => SPEND_HELP,
         Some("usage") => USAGE_HELP,
         Some("keys") => KEYS_HELP,
         Some("wake") => WAKE_HELP,
@@ -50,6 +51,7 @@ Tasks board:
 Accounts and task sessions:
   resource          Account capacity and the managed session working each task
   usage             Quota of a Claude account, from the shared store
+  spend             This week's cost of Claude Code, against the budget
 
 Examples:
   hal board add --text "Fix the flaky test" --priority p1
@@ -90,6 +92,24 @@ seven_day (utilization, resets_at) from the last good reading or null, age_s
 of that reading, retry_at when the endpoint may be asked again, error, and
 token_expires_at: when the stored access token lapses. A lapsed token reads
 as login_required until any claude run for that home refreshes it.
+"#;
+
+const SPEND_HELP: &str = r#"hal spend [--refresh | --reset]
+
+Print one JSON line with what Claude Code cost this calendar week (Monday to
+Sunday, local time), as priced by `ccusage` 20+ from the transcripts in its
+default home on this machine. Codex is not counted.
+
+  --refresh      Run ccusage again even if the stored answer is younger than
+                 [spend].refresh_secs.
+  --reset        Count the week from now: run ccusage, and leave what the week
+                 cost so far out of usd until the next Monday. A second reset
+                 moves the mark; nothing undoes one.
+
+Fields: week (its Monday), usd (since the last reset, if any), reset_usd
+(what the week had cost at that reset, else 0), budget_usd
+([spend].weekly_budget_usd), percent of the budget (not capped at 100),
+observed_at and age_s of the pricing run.
 "#;
 
 const RESOURCE_HELP: &str = r#"hal resource

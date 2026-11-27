@@ -25,7 +25,7 @@ mod status_bar;
 pub mod tasks;
 
 // Items consumed by bin/src/main.rs keep their `hal_lib::ui::X` paths.
-pub use common::build_usage_line;
+pub use common::{build_spend_line, build_usage_line};
 
 use crate::app::{App, Tab, View};
 use crate::config;

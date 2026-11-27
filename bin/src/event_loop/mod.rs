@@ -53,6 +53,7 @@ pub(crate) async fn run(terminal: &mut Term, frame_bytes: Arc<AtomicU64>) -> io:
     let (detail_tx, detail_rx) = mpsc::channel::<String>(4);
 
     workers::spawn_usage(scan_tx.clone());
+    workers::spawn_spend(scan_tx.clone());
     app.harness.supervisor_on = workers::spawn_harness(scan_tx.clone());
     workers::spawn_session_scanner(scan_tx.clone(), detail_rx);
     workers::spawn_task_stats(scan_tx.clone());

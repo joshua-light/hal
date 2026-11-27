@@ -4,7 +4,7 @@
 //!   spinner frames
 //! - popup block, centering geometry, the text cursor, wrapped-row count and
 //!   scroll-position label
-//! - the title-bar usage line
+//! - the title-bar usage and spend lines
 //! - model/tool labels, context-window bars, and time, age, token and cost
 //!   formatters
 //! - one-line row helpers: padding, truncation, the selection stripe
@@ -13,6 +13,7 @@
 use crate::models;
 use crate::models::first_line_truncated;
 use crate::models::SessionState;
+use crate::spend::Spend;
 use crate::tasks::store::{TaskPriority, TaskStatus};
 use crate::ui::palette::{backlog_fg, border_type, planning_fg, separator_fg, theme, DOT_IDLE};
 use crate::usage::UsageInfo;
@@ -161,6 +162,26 @@ pub fn build_usage_line(u: &UsageInfo) -> Line<'static> {
     spans.push(Span::raw(" "));
     append_bar(&mut spans, u.seven_day_pct, 10);
     spans.push(Span::styled(format!(" {}% ", u.seven_day_pct), pct_style));
+
+    Line::from(spans)
+}
+
+/// The week's spend against its budget. Over budget the bar stays full and
+/// the dollars keep counting.
+pub fn build_spend_line(spend: &Spend, budget_usd: f64) -> Line<'static> {
+    let mut spans: Vec<Span> = Vec::new();
+    let pct = spend.percent_of(budget_usd).min(100) as u8;
+    let usd_style = Style::default()
+        .fg(Color::White)
+        .add_modifier(Modifier::BOLD);
+
+    spans.push(Span::styled("spend ", Style::default().fg(Color::DarkGray)));
+    append_bar(&mut spans, pct, 10);
+    spans.push(Span::styled(format!(" ${:.0}", spend.usd()), usd_style));
+    spans.push(Span::styled(
+        format!("/{:.0} ", budget_usd),
+        Style::default().fg(Color::Rgb(90, 90, 100)),
+    ));
 
     Line::from(spans)
 }

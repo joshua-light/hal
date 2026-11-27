@@ -30,6 +30,7 @@ pub mod respawn;
 pub mod send;
 pub mod sessions;
 pub mod spawn;
+pub mod spend;
 pub mod tasks;
 #[cfg(test)]
 pub(crate) mod test_util;

@@ -105,6 +105,10 @@ pub(super) fn render_title_bar(frame: &mut Frame, area: Rect, app: &App) {
         right_spans.push(Span::styled(" │ ", Style::default().fg(separator_fg())));
     }
     right_spans.extend(usage_spans);
+    if !right_spans.is_empty() && app.spend_line.width() > 0 {
+        right_spans.push(Span::styled("│ ", Style::default().fg(separator_fg())));
+    }
+    right_spans.extend(app.spend_line.spans.iter().cloned());
     let right_line = Line::from(right_spans);
     let right_w = right_line.width() as u16;
     let left_w = left_line.width() as u16;

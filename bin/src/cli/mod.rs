@@ -17,6 +17,7 @@ mod help;
 mod keys;
 mod link;
 mod resource;
+mod spend;
 mod usage;
 mod wake;
 
@@ -37,6 +38,7 @@ pub fn dispatch(args: &[String]) -> Option<i32> {
         "resource" => handle(resource::resource(rest)),
         "agent" => handle(agent::agent_subcommand(rest)),
         "board" => handle(board::board_subcommand(rest)),
+        "spend" => handle(spend::spend(rest)),
         "usage" => handle(usage::usage(rest)),
         "keys" => handle(keys::keys(rest)),
         "wake" => handle(wake::wake(rest)),

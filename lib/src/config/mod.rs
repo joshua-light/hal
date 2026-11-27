@@ -38,6 +38,7 @@ pub struct Config {
     pub title: TitleConfig,
     pub inactive: InactiveConfig,
     pub scan: ScanConfig,
+    pub spend: SpendConfig,
     pub ui: UiConfig,
     pub metrics: MetricsConfig,
     pub harness: HarnessConfig,

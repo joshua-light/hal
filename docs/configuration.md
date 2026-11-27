@@ -103,6 +103,13 @@ Sessions with no live process.
 | `usage_refresh_interval_secs` | `60` | How often the TUI reads the account's usage. |
 | `usage_cache_ttl_secs` | `60` | How long a stored usage reading counts as fresh before the endpoint is asked again. |
 
+## `[spend]`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `weekly_budget_usd` | `200` | What a calendar week of Claude Code may cost; Codex is not counted. The title bar draws the week's spend against it; nothing is stopped. `hal spend --reset` starts the count from zero in the middle of a week. |
+| `refresh_secs` | `300` | How long a priced week counts as fresh before `ccusage` runs again. |
+
 ## `[ui]`
 
 | Key | Default | Meaning |

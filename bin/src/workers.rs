@@ -3,7 +3,7 @@
 
 use crate::scan_msg::ScanMsg;
 use hal_lib::sessions::{count, scanner, watcher};
-use hal_lib::{config, harness, metrics, models, send, usage};
+use hal_lib::{config, harness, metrics, models, send, spend, usage};
 use std::io;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -32,6 +32,24 @@ pub(crate) fn spawn_usage(usage_tx: mpsc::Sender<ScanMsg>) {
                 if !publish(&usage_tx, ScanMsg::Usage(u)).await {
                     break;
                 }
+            }
+        }
+    });
+}
+
+/// Price the week. A run that fails with nothing stored for this week leaves
+/// the bar out; the reason is in the log and in `hal spend`.
+pub(crate) fn spawn_spend(spend_tx: mpsc::Sender<ScanMsg>) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(config::get().spend.refresh_interval());
+        loop {
+            interval.tick().await;
+            match tokio::task::spawn_blocking(spend::read).await {
+                Ok(Ok(spend)) => {
+                    let _ = spend_tx.send(ScanMsg::Spend(spend)).await;
+                }
+                Ok(Err(error)) => log::warn!("spend: {error}"),
+                Err(_) => {}
             }
         }
     });

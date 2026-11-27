@@ -152,6 +152,31 @@ impl Default for ScanConfig {
     }
 }
 
+/// The weekly spend bar (`lib/src/spend.rs`).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SpendConfig {
+    /// What a week may cost. The bar is drawn against it; nothing is stopped.
+    pub weekly_budget_usd: f64,
+    /// How long a priced week counts as fresh before `ccusage` runs again.
+    pub refresh_secs: u64,
+}
+
+impl SpendConfig {
+    pub fn refresh_interval(&self) -> Duration {
+        Duration::from_secs(self.refresh_secs.max(1))
+    }
+}
+
+impl Default for SpendConfig {
+    fn default() -> Self {
+        Self {
+            weekly_budget_usd: 200.0,
+            refresh_secs: 300,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct UiConfig {
